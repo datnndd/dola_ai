@@ -1,0 +1,16 @@
+{
+  "manifest_version": 3,
+  "name": "Seedance Studio — Pro · Tạo nhiều video",
+  "version": "2.0.0",
+  "description": "Seedance Studio Pro helper extension for Dola AI video workflows.",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ]
+}

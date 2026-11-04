@@ -1,0 +1,18 @@
+{
+  "task_id": "6cf54cf546a0420ebb9107793f01ef2c",
+  "account_id": "eb57c4dbc4914381b46c7e953dab20a9",
+  "profile": "C:\\Users\\ad\\Desktop\\videohide\\release\\profiles\\eb57c4dbc4914381b46c7e953dab20a9",
+  "prompt": "Một chú chó Shiba và một chú mèo mướp đánh nhau kiểu hoạt hình vui nhộn trong sân vườn: cả hai né đòn, vờn nhau và tạo một đám bụi hài hước, rồi dừng lại, nhìn nhau ngạc nhiên và cùng ngồi xuống. Hoạt hình 3D điện ảnh, chuyển động rõ ràng, không máu me, không thương tích.",
+  "submission_attempted": true,
+  "status": "generated_and_saved",
+  "started_at": "2026-10-30 17:44:20",
+  "conversation_url": "https://www.dola.com/chat/38418452609922833",
+  "error": ": Target page, context or browser has been closed",
+  "video": "C:\\Users\\ad\\Desktop\\toolnew\\downloads\\dog_cat_test\\cho_meo_danh_nhau.mp4",
+  "duration_seconds": 15.103991,
+  "effective_model": "Seedance 2.0 Fast (Dola switched from 2.5)",
+  "download_method": "browser preview fetch",
+  "automatic_download_status": "waiting for clean metadata; owned test browser closed after file saved",
+  "decode_check": "FFmpeg full decode passed",
+  "submission_count": 1
+}

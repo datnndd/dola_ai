@@ -1,0 +1,189 @@
+﻿python.exe : 298 INFO: PyInstaller: 6.22.3, contrib hooks: 2026.7
+At line:1 char:556
++ ... e -Force }; & $venv -m PyInstaller --clean --noconfirm --workpath bui ...
++                 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (298 INFO: PyIns...b hooks: 2026.7:String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+299 INFO: Python: 3.13.9
+342 INFO: Platform: Windows-10-10.0.19044-SP0
+342 INFO: Python environment: C:\Users\ad\Documents\Codex\2026-09-25\l-m-gi-p-t-i\work\.venv
+348 INFO: Removing temporary files and cleaning cache in C:\Users\ad\AppData\Local\pyinstaller
+3379 INFO: Module search paths (PYTHONPATH):
+['C:\\Users\\ad\\Desktop\\New folder',
+ 'C:\\Users\\ad\\AppData\\Local\\Programs\\Python\\Python313\\python313.zip',
+ 'C:\\Users\\ad\\AppData\\Local\\Programs\\Python\\Python313\\DLLs',
+ 'C:\\Users\\ad\\AppData\\Local\\Programs\\Python\\Python313\\Lib',
+ 'C:\\Users\\ad\\AppData\\Local\\Programs\\Python\\Python313',
+ 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv',
+ 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages',
+ 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\win32',
+ 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\win32\\lib',
+ 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\pythonwin',
+ 'C:\\Users\\ad\\Desktop\\New folder']
+4200 INFO: Appending 'datas' from .spec
+4263 INFO: checking Analysis
+4263 INFO: Building Analysis because Analysis-00.toc is non existent
+4263 INFO: Looking for Python shared library...
+4263 INFO: Using Python shared library: C:\Users\ad\AppData\Local\Programs\Python\Python313\python313.dll
+4263 INFO: Running Analysis Analysis-00.toc
+4263 INFO: Target bytecode optimization level: 2
+4263 INFO: Initializing module dependency graph...
+4266 INFO: Initializing module graph hook caches...
+4333 INFO: Analyzing modules for base_library.zip ...
+6707 INFO: Processing standard module hook 'hook-math.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+6755 INFO: Processing standard module hook 'hook-heapq.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+7068 INFO: Processing standard module hook 'hook-encodings.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+12542 INFO: Processing standard module hook 'hook-pickle.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+16177 INFO: Caching module dependency graph...
+16291 INFO: Analyzing C:\Users\ad\Desktop\New folder\studio_qt.py
+17157 INFO: Processing standard module hook 'hook-multiprocessing.util.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+17618 INFO: Processing standard module hook 'hook-xml.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+18418 INFO: Processing standard module hook 'hook-_ctypes.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+18675 INFO: Processing standard module hook 'hook-platform.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+18742 INFO: Processing standard module hook 'hook-webbrowser.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+19864 INFO: Processing standard module hook 'hook-playwright.sync_api.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-0
+9-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\patchright\\_impl\\__pyinstaller'
+24107 INFO: Processing standard module hook 'hook-cryptography.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l
+-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+26381 INFO: hook-cryptography: cryptography does not seem to be using dynamically linked OpenSSL.
+31807 INFO: Processing standard module hook 'hook-urllib3.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi
+-p-t-i\\work\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+32077 INFO: Processing pre-safe-import-module hook 'hook-backports.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-2
+5\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+32080 INFO: SetuptoolsInfo: initializing cached setuptools info...
+33267 INFO: Setuptools: 'backports' appears to be a full setuptools-vendored copy - creating alias to 
+'setuptools._vendor.backports'!
+33284 INFO: Processing standard module hook 'hook-setuptools.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+33329 INFO: Processing pre-safe-import-module hook 'hook-distutils.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-2
+5\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+33462 INFO: Processing standard module hook 'hook-sysconfig.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+33474 INFO: Processing pre-safe-import-module hook 'hook-jaraco.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\
+l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+33475 INFO: Setuptools: 'jaraco' appears to be a full setuptools-vendored copy - creating alias to 
+'setuptools._vendor.jaraco'!
+33534 INFO: Processing pre-safe-import-module hook 'hook-more_itertools.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026
+-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+33535 INFO: Setuptools: 'more_itertools' appears to be a setuptools-vendored copy - creating alias to 
+'setuptools._vendor.more_itertools'!
+33923 INFO: Processing standard module hook 'hook-_osx_support.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+33932 INFO: Processing pre-safe-import-module hook 'hook-typing_extensions.py' from 'C:\\Users\\ad\\Documents\\Codex\\2
+026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+34316 INFO: Processing pre-safe-import-module hook 'hook-packaging.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-2
+5\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+35051 INFO: Processing standard module hook 'hook-setuptools._vendor.jaraco.text.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+35071 INFO: Processing pre-safe-import-module hook 'hook-importlib_resources.py' from 'C:\\Users\\ad\\Documents\\Codex\
+\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+36703 INFO: Processing pre-safe-import-module hook 'hook-tomli.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l
+-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+36705 INFO: Setuptools: 'tomli' appears to be a setuptools-vendored copy - creating alias to 
+'setuptools._vendor.tomli'!
+38170 INFO: Processing pre-safe-import-module hook 'hook-wheel.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l
+-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_safe_import_module'
+38171 INFO: Setuptools: 'wheel' appears to be a setuptools-vendored copy - creating alias to 
+'setuptools._vendor.wheel'!
+39457 INFO: Processing standard module hook 'hook-certifi.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi
+-p-t-i\\work\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+39570 INFO: Processing standard module hook 'hook-charset_normalizer.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09
+-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+40646 INFO: Processing standard module hook 'hook-PySide6.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+41095 INFO: Processing standard module hook 'hook-shiboken6.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+41628 INFO: Processing standard module hook 'hook-PySide6.QtNetwork.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+48101 INFO: Processing standard module hook 'hook-PySide6.QtCore.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+55020 INFO: Processing standard module hook 'hook-PySide6.QtGui.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+81247 INFO: Processing standard module hook 'hook-PySide6.QtWidgets.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+86421 INFO: Analyzing hidden import 'drag_export'
+86448 INFO: Processing pre-safe-import-module hook 'hook-win32com.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25
+\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\pre_safe_import_module'
+86620 INFO: Processing standard module hook 'hook-win32com.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-g
+i-p-t-i\\work\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+86624 INFO: Processing standard module hook 'hook-pythoncom.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-
+gi-p-t-i\\work\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+86792 INFO: Processing standard module hook 'hook-pywintypes.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m
+-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\stdhooks'
+88534 INFO: Analyzing hidden import 'playwright.__main__'
+88537 INFO: Analyzing hidden import 'playwright._impl.__pyinstaller'
+88539 INFO: Analyzing hidden import 'playwright._impl._async_base'
+88549 INFO: Analyzing hidden import 'playwright._impl._path_utils'
+88553 INFO: Analyzing hidden import 'playwright.async_api'
+88567 INFO: Processing standard module hook 'hook-playwright.async_api.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-
+09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\patchright\\_impl\\__pyinstaller'
+89798 INFO: Analyzing hidden import 'patchright.__main__'
+89800 INFO: Analyzing hidden import 'patchright._impl.__pyinstaller'
+89802 INFO: Analyzing hidden import 'patchright._impl._async_base'
+89813 INFO: Analyzing hidden import 'patchright._impl._path_utils'
+89816 INFO: Analyzing hidden import 'patchright.async_api'
+90735 INFO: Processing module hooks (post-graph stage)...
+92696 INFO: Performing binary vs. data reclassification (558 entries)
+116069 INFO: Looking for ctypes DLLs
+116158 INFO: Analyzing run-time hooks ...
+116166 INFO: Including run-time hook 'pyi_rth_inspect.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t
+-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+116189 INFO: Including run-time hook 'pyi_rth_pkgutil.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t
+-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+116206 INFO: Including run-time hook 'pyi_rth_multiprocessing.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-
+m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+116226 INFO: Including run-time hook 'pyi_rth_cryptography_openssl.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-2
+5\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+116239 INFO: Including run-time hook 'pyi_rth_setuptools.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-
+p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+116256 INFO: Including run-time hook 'pyi_rth_pywintypes.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-
+p-t-i\\work\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+116269 INFO: Including run-time hook 'pyi_rth_pythoncom.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p
+-t-i\\work\\.venv\\Lib\\site-packages\\_pyinstaller_hooks_contrib\\rthooks'
+116272 INFO: Including run-time hook 'pyi_rth_pyside6.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t
+-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\rthooks'
+116288 INFO: Processing pre-find-module-path hook 'hook-_pyi_rth_utils.py' from 'C:\\Users\\ad\\Documents\\Codex\\2026-
+09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks\\pre_find_module_path'
+116304 INFO: Processing standard module hook 'hook-_pyi_rth_utils.py' from 
+'C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PyInstaller\\hooks'
+116396 INFO: Creating base_library.zip...
+116803 INFO: Looking for dynamic libraries
+118907 INFO: Extra DLL search directories (AddDllDirectory): 
+['C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\shiboken6']
+118907 INFO: Extra DLL search directories (PATH): 
+['C:\\Users\\ad\\Documents\\Codex\\2026-09-25\\l-m-gi-p-t-i\\work\\.venv\\Lib\\site-packages\\PySide6']
+121921 INFO: Warnings written to C:\Users\ad\Desktop\New folder\build_pyi\StudioPython_qt\warn-StudioPython_qt.txt
+122139 INFO: Graph cross-reference written to C:\Users\ad\Desktop\New 
+folder\build_pyi\StudioPython_qt\xref-StudioPython_qt.html
+122326 INFO: checking PYZ
+122326 INFO: Building PYZ because PYZ-00.toc is non existent
+122326 INFO: Building PYZ (ZlibArchive) C:\Users\ad\Desktop\New folder\build_pyi\StudioPython_qt\PYZ-00.pyz
+127208 INFO: Building PYZ (ZlibArchive) C:\Users\ad\Desktop\New folder\build_pyi\StudioPython_qt\PYZ-00.pyz completed 
+successfully.
+127280 INFO: checking PKG
+127280 INFO: Building PKG because PKG-00.toc is non existent
+127280 INFO: Building PKG (CArchive) SeedanceAuto.pkg
+187783 INFO: Building PKG (CArchive) SeedanceAuto.pkg completed successfully.
+187819 INFO: Bootloader C:\Users\ad\Documents\Codex\2026-09-25\l-m-gi-p-t-i\work\.venv\Lib\site-packages\PyInstaller\bo
+otloader\Windows-64bit-intel\runw.exe
+187820 INFO: checking EXE
+187820 INFO: Building EXE because EXE-00.toc is non existent
+187820 INFO: Building EXE from EXE-00.toc
+187820 INFO: Copying bootloader EXE to C:\Users\ad\Desktop\New folder\dist\SeedanceAuto.exe
+187993 INFO: Copying icon to EXE
+188090 INFO: Copying 0 resources to EXE
+188090 INFO: Embedding manifest in EXE
+188158 INFO: Appending PKG archive to EXE
+188336 INFO: Fixing EXE headers
+189449 INFO: Building EXE from EXE-00.toc completed successfully.
+189488 INFO: Build complete! The results are available in: C:\Users\ad\Desktop\New folder\dist

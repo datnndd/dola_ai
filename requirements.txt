@@ -1,0 +1,9 @@
+PySide6>=6.6
+playwright==1.63.0
+patchright==1.62.3
+
+cryptography>=43
+
+google-auth>=2.0
+requests>=2.31
+aiohttp>=3.10,<4

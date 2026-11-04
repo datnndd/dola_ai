@@ -1,0 +1,13 @@
+THIRD-PARTY NOTICES
+===================
+
+This distribution includes Chrome for Testing/Chromium components. See the
+ABOUT file shipped inside the browser directory for Chromium notices.
+
+This distribution may include an FFmpeg build. Run `ffmpeg.exe -version` for
+its exact configuration and license options. The selected build reports GPL
+and version 3 options; redistribution must comply with the corresponding
+FFmpeg and GNU GPL requirements, including source-code obligations.
+
+Patchright, Playwright, PySide6 and other Python dependencies retain their
+respective upstream licenses. This notice does not replace those licenses.

@@ -1,0 +1,13 @@
+SEEDANCE AUTO - HUONG DAN CAI DAT
+================================
+
+1. Giai nen TOAN BO thu muc phat hanh vao mot thu muc rieng.
+2. Khong doi ten, di chuyen hoac sua cac thu muc browser, extensions.
+3. Chay SeedanceAuto.exe.
+4. Nhap API key duoc cap. Gui Ma may hien trong Cai dat cho quan tri vien de kich hoat.
+5. Chrome, FFmpeg va extension duoc tu dong nhan; khong can chon duong dan.
+
+Neu ung dung bao tai nguyen bi thay doi/hong, hay xoa ban cu va giai nen lai
+nguyen ven bo phat hanh. Moi tai khoan Dola su dung mot profile rieng tren may.
+
+Khong chia se API key. Key duoc rang buoc voi ma may va may chu co the thu hoi.
