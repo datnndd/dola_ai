@@ -6,3 +6,11 @@ scripts/bin/harness.exe
 .agents/
 docs/
 AGENTS.md
+
+# Sensitive user data & profiles
+data/
+downloads/
+__pycache__/
+*.pyc
+.env
+scratch/
