@@ -1,6 +1,0 @@
-2026/11/04-21:02:56.482 88dc Reusing MANIFEST C:\Users\ddat2\Downloads\Projects\vid_dola_tool\data\profiles\0a13f2579d8643428d929eecff55f407\Default\Local Storage\leveldb/MANIFEST-000001
-2026/11/04-21:02:56.487 88dc Recovering log #10
-2026/11/04-21:02:56.490 88dc Reusing old log C:\Users\ddat2\Downloads\Projects\vid_dola_tool\data\profiles\0a13f2579d8643428d929eecff55f407\Default\Local Storage\leveldb/000010.log 
-2026/11/04-21:04:57.402 4e20 Level-0 table #13: started
-2026/11/04-21:04:57.409 4e20 Level-0 table #13: 25681 bytes OK
-2026/11/04-21:04:57.414 4e20 Delete type=0 #10
