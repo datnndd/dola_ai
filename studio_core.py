@@ -209,7 +209,7 @@ def defaults():
             'browser': find_browser(), 'show_browser': True, 'load_extension': True, 'extension_bundle_version': 2, 'auto_retry': False, 'lock_root': str(DATA / 'locks'), 'import_on_start': True}
 
 
-def build_facebook_cookie_accounts(cookie_lines, proxy_lines):
+def build_facebook_cookie_accounts(cookie_lines, proxy_lines, default_mode='default'):
     """(cookies, proxy, mode) per line. Raises ValueError naming the bad line only."""
     built = []
     for index, line in enumerate(cookie_lines, 1):
@@ -224,7 +224,7 @@ def build_facebook_cookie_accounts(cookie_lines, proxy_lines):
                 raise ValueError(f'Dòng {index}: proxy không hợp lệ (host:port hoặc host:port:user:pass).')
             built.append((cookies, proxy, 'manual'))
         else:
-            built.append((cookies, {}, 'default'))
+            built.append((cookies, {}, default_mode))
     return built
 
 

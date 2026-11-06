@@ -164,52 +164,68 @@ def parse_cookie_line(line):
     return result
 
 
-def parse_facebook_cookie_line(line):
-    """Parse one Facebook cookie export without accepting credentials/password fields."""
-    line=line.strip()
-    if not line: raise ValueError('Dòng cookie Facebook đang trống.')
-    if line.startswith(('[','{')):
-        try: value=json.loads(line)
-        except ValueError: raise ValueError('JSON cookie Facebook không hợp lệ.') from None
-        raw=([value] if isinstance(value,dict) and 'name' in value and 'value' in value else
-             value.get('cookies') if isinstance(value,dict) else value)
-    else:
-        if line.lower().startswith('cookie:'): line=line[7:].strip()
-        raw=[]
-        for field in line.split(';'):
-            if not field.strip(): continue
-            if '=' not in field: raise ValueError('Cookie Facebook cần dạng name=value; name=value.')
-            name,value=field.strip().split('=',1)
-            raw.append({'name':name.strip(),'value':value,'domain':'.facebook.com','path':'/','secure':True})
-    if not isinstance(raw,list) or not raw or len(raw)>500: raise ValueError('Cần từ 1 đến 500 cookie Facebook.')
-    result=[]; seen=set()
+def _build_facebook_cookie_objects(raw):
+    if not isinstance(raw, list) or not raw or len(raw) > 500:
+        raise ValueError('Cần từ 1 đến 500 cookie Facebook.')
+    result = []; seen = set()
     for item in raw:
-        if not isinstance(item,dict) or not isinstance(item.get('name'),str) or not isinstance(item.get('value'),str):
+        if not isinstance(item, dict) or not isinstance(item.get('name'), str) or not isinstance(item.get('value'), str):
             raise ValueError('Cookie Facebook cần name và value hợp lệ.')
-        domain=str(item.get('domain') or urlsplit(item.get('url','')).hostname or '.facebook.com').lower()
+        name = item['name'].split('|')[-1].strip() if '|' in item['name'] else item['name'].strip()
+        value = item['value'].strip().strip('"\'')
+        if not name or not value:
+            continue
+        domain = str(item.get('domain') or urlsplit(item.get('url', '')).hostname or '.facebook.com').lower()
         if domain.endswith('facebook.com'):
             domain = '.facebook.com'
         elif not domain.startswith('.'):
             domain = '.' + domain
-        if not re.fullmatch(r'(?:\.[a-z0-9-]+)*\.facebook\.com',domain):
+        if not re.fullmatch(r'(?:\.[a-z0-9-]+)*\.facebook\.com', domain):
             raise ValueError('Chỉ nhận cookie thuộc facebook.com.')
-        key=(item['name'],domain,item.get('path','/'))
-        if key in seen: raise ValueError('Cookie Facebook bị trùng tên/miền/đường dẫn.')
+        key = (name, domain, item.get('path', '/'))
+        if key in seen:
+            continue
         seen.add(key)
-        raw_samesite = str(item.get('sameSite') or 'None').capitalize()
-        samesite = 'None' if raw_samesite in ('None', 'No_restriction') else (raw_samesite if raw_samesite in ('Lax', 'Strict') else 'None')
+        raw_samesite = str(item.get('sameSite') or 'Lax').capitalize()
+        samesite = 'None' if raw_samesite in ('None', 'No_restriction') else (raw_samesite if raw_samesite in ('Strict', 'Lax') else 'Lax')
         secure = True if samesite == 'None' else bool(item.get('secure', True))
-        result.append({'name':item['name'],'value':item['value'],'domain':domain,'path':item.get('path','/'),
-                       'secure':secure,'httpOnly':bool(item.get('httpOnly',False)),
-                       'sameSite':samesite})
-    names={c['name'] for c in result}
-    if not {'c_user','xs'}.issubset(names):
+        result.append({'name': name, 'value': value, 'domain': domain, 'path': item.get('path', '/'),
+                       'secure': secure, 'httpOnly': bool(item.get('httpOnly', False)),
+                       'sameSite': samesite})
+    names = {c['name'] for c in result}
+    if not {'c_user', 'xs'}.issubset(names):
         raise ValueError('Cookie Facebook cần có cả c_user và xs.')
     return result
 
 
+def parse_facebook_cookie_line(line):
+    """Parse one Facebook cookie export without accepting credentials/password fields."""
+    line = line.strip()
+    if not line:
+        raise ValueError('Dòng cookie Facebook đang trống.')
+    if line.startswith(('[', '{')):
+        try:
+            value = json.loads(line)
+        except ValueError:
+            raise ValueError('JSON cookie Facebook không hợp lệ.') from None
+        raw = ([value] if isinstance(value, dict) and 'name' in value and 'value' in value else
+               value.get('cookies') if isinstance(value, dict) else value)
+    else:
+        if line.lower().startswith('cookie:'):
+            line = line[7:].strip()
+        raw = []
+        for field in line.split(';'):
+            if not field.strip():
+                continue
+            if '=' not in field:
+                raise ValueError('Cookie Facebook cần dạng name=value; name=value.')
+            name, value = field.strip().split('=', 1)
+            raw.append({'name': name.strip(), 'value': value, 'domain': '.facebook.com', 'path': '/', 'secure': True})
+    return _build_facebook_cookie_objects(raw)
+
+
 def _has_facebook_cookie(text):
-    low=text.lower()
+    low = text.lower()
     return 'c_user=' in low and 'xs=' in low
 
 
@@ -219,33 +235,62 @@ def facebook_cookie_from_line(line):
     Accepts the pipe export ``uid|secret|c_user=…; xs=…|email`` (extra fields such
     as uid, 2FA secret and email are ignored), a plain ``c_user=…; xs=…`` string,
     ``cookie: …``, or a JSON array/object. Fails only when no cookie is present."""
-    line=line.strip()
+    line = line.strip()
     if not line:
         raise ValueError('Dòng cookie Facebook đang trống.')
-    if line.startswith(('[','{')):
+    if line.startswith(('[', '{')):
         return parse_facebook_cookie_line(line)
-    segments=[s.strip() for s in line.split('|')] if '|' in line else [line]
-    candidates=[s for s in segments if _has_facebook_cookie(s)]
+
+    text = line[7:].strip() if line.lower().startswith('cookie:') else line
+    segments = [s.strip() for s in text.split('|')] if '|' in text else [text]
+
+    # Extract all name=value pairs across all segments to preserve datr, sb, fr, etc.
+    raw = []
+    seen_names = set()
+    for seg in segments:
+        if '=' not in seg:
+            continue
+        for part in seg.split(';'):
+            part = part.strip()
+            if not part or '=' not in part:
+                continue
+            name, value = part.split('=', 1)
+            if '|' in name:
+                name = name.split('|')[-1]
+            name = name.strip()
+            value = value.strip().strip('"\'')
+            if name and value and name not in seen_names:
+                seen_names.add(name)
+                raw.append({'name': name, 'value': value, 'domain': '.facebook.com', 'path': '/', 'secure': True})
+
+    if {'c_user', 'xs'}.issubset(seen_names):
+        return _build_facebook_cookie_objects(raw)
+
+    # Fallback to candidates if segments had complex formatting
+    candidates = [s for s in segments if _has_facebook_cookie(s)]
     if not candidates:
-        # Some exports put each name=value in its own pipe field.
-        joined='; '.join(s for s in segments if '=' in s and ';' not in s and s.count('=')==1)
+        joined = '; '.join(s for s in segments if '=' in s and ';' not in s and s.count('=') == 1)
         if _has_facebook_cookie(joined):
-            candidates=[joined]
+            candidates = [joined]
     if not candidates:
         raise ValueError('Không tìm thấy cookie Facebook trong dòng này (cần cả c_user và xs).')
-    # The richest segment carries the full cookie when several fields match.
     return parse_facebook_cookie_line(max(candidates, key=len))
 
 
 def save_cookies(folder, account_id, cookies):
-    folder=Path(folder); folder.mkdir(parents=True,exist_ok=True)
-    target=folder/(account_id+'.dpapi')
-    target.write_text(protect(json.dumps(cookies,ensure_ascii=False)),encoding='ascii')
+    folder = Path(folder); folder.mkdir(parents=True, exist_ok=True)
+    target = folder / (account_id + '.dpapi')
+    target.write_text(protect(json.dumps(cookies, ensure_ascii=False)), encoding='ascii')
     return str(target.resolve())
 
 
 def load_cookies(account):
     try:
-        return json.loads(protect(Path(account['cookie_file']).read_text(encoding='ascii'),decrypt=True))
+        cookies = json.loads(protect(Path(account['cookie_file']).read_text(encoding='ascii'), decrypt=True))
+        if isinstance(cookies, list):
+            for c in cookies:
+                if isinstance(c, dict) and '|' in c.get('name', ''):
+                    c['name'] = c['name'].split('|')[-1].strip()
+        return cookies
     except Exception:
         raise ValueError('Không đọc được cookie đã lưu. Nhập lại cookie bằng đúng tài khoản Windows.') from None

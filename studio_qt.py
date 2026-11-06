@@ -3264,7 +3264,7 @@ class LoginDialog(AccountFormDialog):
         mode, typed, backend = self.proxy.mode(), self.proxy.entry.text(), self.chosen_backend()
         cookie_text = self.cookie.toPlainText() if self.facebook else ''
         def work():
-            cookies = parse_facebook_cookie_line(cookie_text) if self.facebook else None
+            cookies = facebook_cookie_from_line(cookie_text) if self.facebook else None
             proxy = parse_proxy(typed) if mode == 'manual' else {}
             if mode == 'manual' and not proxy:
                 raise ValueError('Nhập proxy dạng host:port hoặc host:port:user:pass.')
@@ -3295,13 +3295,16 @@ class LoginDialog(AccountFormDialog):
 
 class FacebookBatchDialog(AccountFormDialog):
     def __init__(self, app):
-        super().__init__(app, 'Cookie Facebook → Dola (nhiều dòng)', 'NHẬP COOKIE FACEBOOK — MỖI DÒNG MỘT TÀI KHOẢN', 720, 620)
+        super().__init__(app, 'Cookie Facebook → Dola (nhiều dòng)', 'NHẬP COOKIE FACEBOOK — MỖI DÒNG MỘT TÀI KHOẢN', 720, 680)
         self.note('Mỗi dòng là một tài khoản. Nhận nhiều dạng, miễn có cookie Facebook (c_user và xs):\n'
                   '• uid|mật khẩu/2FA|c_user=…; xs=…|email  • chuỗi c_user=…; xs=…  • JSON cookie\n'
                   'Các trường thừa như uid, 2FA, email được bỏ qua.')
         self.cookies = self.text_box('Mỗi dòng một tài khoản…', mono=True)
-        self.note('Proxy theo từng dòng (host:port hoặc host:port:user:pass). Dòng trống = proxy mặc định (ProxyNo1) trong Cài đặt.')
-        self.proxies = self.text_box('Dòng 1 ↔ tài khoản 1…', mono=True, height=90)
+        self.note('Chế độ proxy cơ bản cho các tài khoản:')
+        self.proxy = ProxyModeField()
+        self.lay.addWidget(self.proxy)
+        self.note('Proxy theo từng dòng (tùy chọn, ghi đè chế độ trên; host:port hoặc host:port:user:pass):')
+        self.proxies = self.text_box('Dòng 1 ↔ tài khoản 1…', mono=True, height=80)
         self.backend_field()
         self.note('Mỗi tài khoản mở một cửa sổ riêng; nạp cookie rồi chờ bạn đăng nhập Facebook trên Dola.\n'
                   'Tool tự nhận tên, lưu và đóng cửa sổ. CAPTCHA/checkpoint/2FA xử lý thủ công. Đóng cửa sổ một tài khoản chỉ dừng tài khoản đó.')
@@ -3316,12 +3319,13 @@ class FacebookBatchDialog(AccountFormDialog):
         if self.app.running or self.app.account_jobs:
             self.say('Đóng các cửa sổ đăng nhập/kiểm tra đang mở hoặc chờ batch kết thúc.'); return
         lines, proxy_lines, backend = self._lines(), self.proxies.toPlainText().splitlines(), self.chosen_backend()
+        mode = self.proxy.mode()
         if not lines or len(lines) > 50:
             self.say('Nhập từ 1 đến 50 dòng cookie.'); return
         def apply(built):
             self.accept()
             self.app.start_facebook_cookie_batch(built, backend)
-        self.background(lambda: build_facebook_cookie_accounts(lines, proxy_lines), apply,
+        self.background(lambda: build_facebook_cookie_accounts(lines, proxy_lines, default_mode=mode), apply,
                         'Đang đọc cookie…', 'Không đọc được cookie Facebook.')
 
 

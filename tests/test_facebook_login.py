@@ -11,10 +11,10 @@ class TestFacebookCookie(unittest.TestCase):
         names = {c['name']: c for c in cookies}
         self.assertIn('c_user', names)
         self.assertIn('xs', names)
-        self.assertEqual(names['c_user']['sameSite'], 'None')
+        self.assertEqual(names['c_user']['sameSite'], 'Lax')
         self.assertTrue(names['c_user']['secure'])
         self.assertTrue(names['c_user']['domain'].startswith('.'))
-        self.assertEqual(names['xs']['sameSite'], 'None')
+        self.assertEqual(names['xs']['sameSite'], 'Lax')
         self.assertTrue(names['xs']['secure'])
 
     def test_parse_pipe_format(self):
@@ -23,7 +23,7 @@ class TestFacebookCookie(unittest.TestCase):
         self.assertEqual(len(cookies), 2)
         names = {c['name']: c for c in cookies}
         self.assertEqual(names['c_user']['value'], '100012345678')
-        self.assertEqual(names['c_user']['sameSite'], 'None')
+        self.assertEqual(names['c_user']['sameSite'], 'Lax')
 
     def test_parse_json_cookie_format(self):
         import json
@@ -264,6 +264,47 @@ class TestFacebookBrowserLogin(unittest.TestCase):
         cookies = parse_facebook_cookie_line(line)
         for c in cookies:
             self.assertEqual(c['domain'], '.facebook.com')
+
+    def test_parse_multi_segment_pipe_format(self):
+        line = "61596205320801|RISATUL@03|RKUJDI754SALVOV3|dpr=2; datr=abc|sb=def; m_pixel_ratio=2|c_user=123|xs=456|fr=ghi"
+        cookies = facebook_cookie_from_line(line)
+        names = {c['name']: c['value'] for c in cookies}
+        self.assertIn('datr', names)
+        self.assertIn('sb', names)
+        self.assertIn('c_user', names)
+        self.assertIn('xs', names)
+        self.assertIn('fr', names)
+        self.assertEqual(names['c_user'], '123')
+        self.assertEqual(names['xs'], '456')
+        self.assertEqual(names['datr'], 'abc')
+
+    def test_parse_pipe_prefixed_cookie_name(self):
+        line = "61596104491667|sakibvai10@31|BUMZMOUGSHVILODY|datr=wYnn; sb=abc; c_user=123; xs=456"
+        cookies = facebook_cookie_from_line(line)
+        names = {c['name']: c['value'] for c in cookies}
+        self.assertIn('datr', names)
+        self.assertEqual(names['datr'], 'wYnn')
+        self.assertNotIn('61596104491667|sakibvai10@31|BUMZMOUGSHVILODY|datr', names)
+
+    def test_parse_quoted_and_whitespace_values(self):
+        line = 'c_user= "1000123" ; xs="abc-456" '
+        cookies = parse_facebook_cookie_line(line)
+        names = {c['name']: c['value'] for c in cookies}
+        self.assertEqual(names['c_user'], '1000123')
+        self.assertEqual(names['xs'], 'abc-456')
+
+    def test_build_facebook_cookie_accounts_default_mode(self):
+        from studio_core import build_facebook_cookie_accounts
+        lines = ["c_user=123; xs=456", "c_user=789; xs=012"]
+        built_off = build_facebook_cookie_accounts(lines, [], default_mode='off')
+        self.assertEqual(len(built_off), 2)
+        self.assertEqual(built_off[0][2], 'off')
+        self.assertEqual(built_off[0][1], {})
+        self.assertEqual(built_off[1][2], 'off')
+
+        built_default = build_facebook_cookie_accounts(lines, ["127.0.0.1:8080"], default_mode='default')
+        self.assertEqual(built_default[0][2], 'manual')
+        self.assertEqual(built_default[1][2], 'default')
 
 
 if __name__ == '__main__':
