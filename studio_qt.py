@@ -420,6 +420,52 @@ class Studio(QMainWindow):
         self.log(f"💬 Mở Chat Dola bằng tài khoản: {account.get('name', 'profile')}")
         self.run_account_action(account, login=True, url='https://www.dola.com/chat')
 
+    def _report_auto_job_done(self, task, path):
+        def work():
+            try:
+                from auto_jobs import JobsClient, ReportJournal
+                from cookie_accounts import protect
+                cfg = self.settings
+                p_key = cfg.get('auto_render_key_protected')
+                if not p_key:
+                    return
+                client = JobsClient(protect(p_key, decrypt=True), machine_name=cfg.get('auto_machine_code', ''))
+                final_path = Path(path).resolve()
+                item = {
+                    'job_id': task['task_code'],
+                    'status': 'done',
+                    'folder': final_path.parent.as_posix(),
+                    'path': final_path.as_posix()
+                }
+                reported = False
+                if task.get('lease'):
+                    item['lease'] = task['lease']
+                    try:
+                        res = client.report([item])
+                        if res and res[0].get('ok'):
+                            reported = True
+                    except Exception:
+                        pass
+                if not reported:
+                    legacy_item = {'task_code': task['task_code'], 'status': 'done',
+                                   'folder': final_path.parent.as_posix(), 'path': final_path.as_posix()}
+                    res = client.legacy_report(legacy_item)
+                    if res and res.get('ok'):
+                        reported = True
+                if reported:
+                    journal_file = DATA / 'auto_jobs_v2.json'
+                    if journal_file.exists():
+                        j = ReportJournal(journal_file)
+                        if task['id'] in j.rows:
+                            j.finish(task['id'], 'done', folder=final_path.parent.as_posix(), path=final_path.as_posix())
+                            j.acknowledge(task['id'])
+                    self.events.put(('auto_report', task['id'], 'done'))
+                    self.events.put(('status', task['id'], '✓ Hoàn thành • đã báo API'))
+                    self.events.put(('log', f"STT {task.get('stt')} • {task.get('task_code')}: đã báo hoàn thành lên web."))
+            except Exception as exc:
+                self.events.put(('log', f"Báo kết quả web: {exc}"))
+        self.run_background(work)
+
     def request_accounts_paint(self):
         if self._accounts_paint is not None:
             return
@@ -1253,6 +1299,8 @@ class Studio(QMainWindow):
                 self.events.put(('task_result', tid, str(path.resolve())))
                 self.events.put(('status', tid, '✓ Hoàn thành • đã lấy video từ hội thoại'))
                 self.events.put(('log', f"{task['name']}: Đã lấy video {path.name}"))
+                if job.get('auto_job') and job.get('task_code'):
+                    self._report_auto_job_done(job, path)
             except Cancelled:
                 self.events.put(('status', tid, 'Đã hủy'))
             except Exception as exc:
@@ -1454,9 +1502,24 @@ class Studio(QMainWindow):
                     return report
                 def settle(task, path, error):
                     if error is None:
+                        if task.get('auto_job') and task.get('stt'):
+                            try:
+                                final = task_output_path(cfg['output'], task)
+                                final.parent.mkdir(parents=True, exist_ok=True)
+                                src_path = Path(path).resolve()
+                                if src_path != final:
+                                    if final.exists():
+                                        arch = final.parent / '_previous'; arch.mkdir(exist_ok=True)
+                                        final.replace(arch / (final.stem + '_' + uuid.uuid4().hex[:8] + '.mp4'))
+                                    src_path.replace(final)
+                                path = final
+                            except Exception as e:
+                                self.events.put(('log', f"Lưu file Auto: {e}"))
                         self.events.put(('task_result', task['id'], str(Path(path).resolve())))
                         self.events.put(('status', task['id'], '✓ Hoàn thành'))
                         self.events.put(('log', f"{task['name']}: Đã lưu {Path(path).name}"))
+                        if task.get('auto_job') and task.get('task_code'):
+                            self._report_auto_job_done(task, Path(path))
                     elif isinstance(error, Cancelled):
                         self.events.put(('status', task['id'], 'Đã hủy'))
                     else:

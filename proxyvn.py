@@ -56,7 +56,13 @@ def proxy_source(settings):
     if src == 'manual':
         return 'manual'
     if src == 'pvn':
+        from proxy_pool import _decode_keys
+        if not _decode_keys((settings or {}).get('proxyvn_keys_protected')) and manual_proxies(settings or {}):
+            return 'manual'
         return 'pvn'
+    from proxy_pool import _decode_keys
+    if not _decode_keys((settings or {}).get('proxyno1_keys_protected')) and manual_proxies(settings or {}):
+        return 'manual'
     return 'proxyno1'
 
 
@@ -403,6 +409,17 @@ def gpm_proxy_account(settings, account, cancel=None, report=None, *, rotators=N
     import proxy_pool
     tagged = proxy_pool.source_keys(settings)
     if not tagged:
+        proxies = manual_proxies(settings or {})
+        if proxies:
+            runtime = dict(account)
+            position = (settings or {}).get('manual_proxy_slots', {}).get(account.get('id'))
+            if position is None:
+                position = zlib.crc32(str(account.get('id', '')).encode('utf-8'))
+            runtime['proxy'] = dict(proxies[position % len(proxies)])
+            report(f'Proxy sẵn {position % len(proxies) + 1}/{len(proxies)} • {endpoint(runtime["proxy"])} • gắn vào Chrome.')
+            return runtime
+        if (account.get('proxy') or {}).get('server'):
+            return account
         name = proxy_pool.NAME_VN if proxy_source(settings) == 'pvn' else proxy_pool.NAME_NO1
         raise RuntimeError(f'Chưa có key {name}. Điền key {name} trong Cài đặt → Proxy '
                            '(hoặc chọn "Proxy nhập tay"). Dừng tài khoản này.')

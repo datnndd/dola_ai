@@ -705,6 +705,16 @@ class AutoJobs:
             word = {'done': 'hoàn thành', 'release': 'trả lại hàng đợi', 'fail': 'lỗi'}[label]
             self.log(f"STT {row['stt']} • {row['task_code']}: đã báo {word} lên web.")
             return
+        if label == 'done' and (result.get('error') in ('LEASE_EXPIRED', 'LEASE_MISMATCH', 'LEASE_LOST') or not result.get('ok')):
+            try:
+                legacy_res = self.client.legacy_report(item)
+                if legacy_res and legacy_res.get('ok'):
+                    self.journal.acknowledge(tid)
+                    self.emit('auto_report', tid, 'done')
+                    self.log(f"STT {row['stt']} • {row['task_code']}: đã báo hoàn thành lên web (đồng bộ trực tiếp).")
+                    return
+            except Exception:
+                pass
         # Rejected for good (cancelled / reassigned / invalid data): never resend.
         self.journal.acknowledge(tid, expired=True)
         self.emit('auto_report', tid, 'rejected')
