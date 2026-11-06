@@ -307,5 +307,62 @@ class TestFacebookBrowserLogin(unittest.TestCase):
         self.assertEqual(built_default[1][2], 'default')
 
 
+    def test_dola_identity_extracts_from_user_trigger_button(self):
+        from dola_browser import dola_identity
+        from unittest.mock import MagicMock
+
+        page = MagicMock()
+        page.url = 'https://www.dola.com/chat'
+        page.get_by_role.return_value.all.return_value = []
+
+        btn = MagicMock()
+        btn.is_visible.return_value = True
+        span = MagicMock()
+        span.is_visible.return_value = True
+        span.inner_text.return_value = 'Sakio Hasab'
+        btn.locator.side_effect = lambda sel: MagicMock(all=lambda: [span] if 'span' in sel else [])
+
+        def locator_fn(sel):
+            mock = MagicMock()
+            if 'text-dbx-text-primary' in sel:
+                mock.all.return_value = []
+            elif 'dropdown-menu-trigger' in sel or 'avatar' in sel:
+                mock.all.return_value = [btn]
+            else:
+                mock.all.return_value = []
+            return mock
+
+        page.locator.side_effect = locator_fn
+        page.evaluate.return_value = ''
+        name = dola_identity(page)
+        self.assertEqual(name, 'Sakio Hasab')
+
+    def test_wait_for_dola_identity_returns_stable_name_on_window_close(self):
+        import time, threading
+        from dola_browser import wait_for_dola_identity
+        from unittest.mock import MagicMock, patch
+
+        closed_state = [False, False, True]
+        def mock_is_closed():
+            return closed_state.pop(0) if closed_state else True
+
+        page = MagicMock()
+        page.is_closed.side_effect = mock_is_closed
+        page.url = 'https://www.dola.com/chat'
+
+        context = MagicMock()
+        context.pages = [page]
+
+        with patch('dola_browser.dola_identity', return_value='Sakio Hasab'),              patch('dola_browser.time.sleep', return_value=None):
+            cancel = threading.Event()
+            t = [100.0]
+            def fake_monotonic():
+                t[0] += 2.0
+                return t[0]
+
+            with patch('dola_browser.time.monotonic', side_effect=fake_monotonic):
+                name = wait_for_dola_identity(context, cancel, lambda s: None)
+            self.assertEqual(name, 'Sakio Hasab')
+
 if __name__ == '__main__':
     unittest.main()

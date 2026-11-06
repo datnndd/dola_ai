@@ -2094,7 +2094,7 @@ class Studio(QMainWindow):
             try:
                 if cancel.is_set(): raise Cancelled('Đã dừng kiểm tra tài khoản.')
                 ok = account_browser(cfg, snapshot, cancel, lambda s: self.events.put(('log', s)), login=login)
-                verified = bool(ok and not login)
+                verified = bool(ok and (snapshot.get('_login_verified') or not login))
                 status = 'Live • Phiên hợp lệ' if verified else ('Chưa kiểm tra' if login else 'Die • Cần đăng nhập')
             except Cancelled:
                 status = 'Chưa kiểm tra'; self.events.put(('log', 'Đã dừng thao tác tài khoản.'))
@@ -2103,7 +2103,8 @@ class Studio(QMainWindow):
             if snapshot.get('hidemium_profile_id'):
                 self.events.put(('browser_profile', account['id'], {k: snapshot[k] for k in
                                  ('browser_backend', 'hidemium_profile_id', 'hidemium_owned') if k in snapshot}))
-            self.events.put(('account', account['id'], status, snapshot.get('name', '') if ok and not login else '', bool(ok and not login)))
+            name_to_save = snapshot.get('name', '') if (ok and (snapshot.get('_login_verified') or not login)) else ''
+            self.events.put(('account', account['id'], status, name_to_save, verified))
         if login:
             self.run_background(worker)
         else:

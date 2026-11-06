@@ -718,19 +718,31 @@ def account_browser(settings, account, cancel, report, login=False):
                     source = {'cookie_file':str(snapshot)} if snapshot.exists() else account
                     context.add_cookies(load_cookies(source))
                     report('Đã nạp cookie Dola đã lưu vào profile.')
-                # Opening an existing profile is not registration or verification.
+                elif account.get('cookie_file') and Path(account['cookie_file']).exists():
+                    try:
+                        context.add_cookies(load_cookies(account))
+                        report('Đã nạp cookie đã lưu vào profile.')
+                    except Exception:
+                        pass
                 try:
                     page.goto(target, wait_until='domcontentloaded', timeout=45000)
                 except BrowserError:
                     if page.is_closed():
                         return True
                     report('Trang chưa tải xong; cửa sổ vẫn mở để bạn thao tác.')
-                report(f"Đã mở {account['name']}. Bạn dùng trình duyệt và tự đóng khi xong; tool không kiểm tra phiên hay tự nhận tên.")
+                report(f"Đã mở {account.get('name', 'profile')}. Bạn dùng trình duyệt và tự đóng khi xong; tool sẽ tự lưu phiên nếu đăng nhập thành công.")
                 while True:
                     check_cancel(cancel)
                     pages = [tab for tab in context.pages if not tab.is_closed()]
                     if not pages:
                         break
+                    for tab in pages:
+                        if urlsplit(tab.url).hostname in ('dola.com', 'www.dola.com'):
+                            name = dola_identity(tab)
+                            if name or dola_account_present(tab):
+                                if name: account['name'] = name
+                                save_live_session(context, settings, account)
+                                account['_login_verified'] = True
                     try:
                         pages[0].wait_for_timeout(250)
                     except BrowserError:
@@ -745,7 +757,10 @@ def account_browser(settings, account, cancel, report, login=False):
                 if account.get('cookie_kind') == 'dola' and not session_snapshot_path(settings, account).exists():
                     name = authenticate_cookie_context(context, settings, account, cancel, report, page=page)
                 elif not session_snapshot_path(settings, account).exists():
-                    return False
+                    if account.get('cookie_file') and Path(account['cookie_file']).exists():
+                        name = authenticate_cookie_context(context, settings, account, cancel, report, page=page)
+                    else:
+                        return False
                 else:
                     try:
                         name = restore_cookie_session(context, settings, account, cancel, report, page=page)
@@ -774,25 +789,91 @@ def account_browser(settings, account, cancel, report, login=False):
             except Exception: pass
 
 
+def _clean_account_label(txt):
+    if not txt:
+        return ''
+    cleaned = ' '.join(str(txt).split())
+    if not (1 <= len(cleaned) <= 120):
+        return ''
+    lower = cleaned.lower()
+    if lower in ('đăng nhập', 'log in', 'sign in', 'nâng cấp', 'upgrade', 'pro', 'work', 'fast',
+                 'free', 'miễn phí', 'free plan', 'dola', 'dola ai', 'cài đặt', 'settings',
+                 'tạo video', 'create video', 'chat', 'trò chuyện'):
+        return ''
+    if mode_kind_from_name(cleaned):
+        return ''
+    return cleaned
+
+
 def dola_identity(page):
     if urlsplit(page.url).hostname not in ('dola.com', 'www.dola.com'): return ''
     login = page.get_by_role('button',name=re.compile(r'^(Đăng nhập|Log in|Sign in)$',re.I))
-    if any(x.is_visible() for x in login.all()): return ''
-    # Account dropdown in the sidebar; avoid layout-dependent height classes.
-    # Do not use arbitrary body text or a Google avatar as account identity.
-    labels = page.locator(':is(nav, aside, [data-slot="sidebar"], [data-sidebar="sidebar"]) '
-                          ':is(button, [role="button"])[data-slot="dropdown-menu-trigger"][aria-haspopup="menu"] '
-                          'span.text-dbx-text-primary')
-    for label in labels.all():
-        if label.is_visible():
-            name=' '.join(label.inner_text().split())
-            if 1 <= len(name) <= 120: return name
-    # Some layouts render the account dropdown outside a semantic sidebar.
-    candidates=page.locator('[data-slot="dropdown-menu-trigger"][aria-haspopup="menu"]:has(img) span.text-dbx-text-primary')
-    for label in candidates.all():
-        if label.is_visible():
-            name=' '.join(label.inner_text().split())
-            if 1 <= len(name) <= 120 and not mode_kind_from_name(name): return name
+    try:
+        if any(x.is_visible() for x in login.all()): return ''
+    except Exception:
+        pass
+
+    # 1. Account dropdown in sidebar / header with span.text-dbx-text-primary
+    try:
+        labels = page.locator(':is(nav, aside, [data-slot="sidebar"], [data-sidebar="sidebar"]) '
+                              ':is(button, [role="button"])[data-slot="dropdown-menu-trigger"][aria-haspopup="menu"] '
+                              'span.text-dbx-text-primary')
+        for label in labels.all():
+            if label.is_visible():
+                name = _clean_account_label(label.inner_text())
+                if name: return name
+    except Exception:
+        pass
+
+    try:
+        candidates = page.locator('[data-slot="dropdown-menu-trigger"][aria-haspopup="menu"]:has(img) span.text-dbx-text-primary')
+        for label in candidates.all():
+            if label.is_visible():
+                name = _clean_account_label(label.inner_text())
+                if name: return name
+    except Exception:
+        pass
+
+    # 2. General user button with avatar in sidebar/footer/header
+    try:
+        user_triggers = page.locator(
+            ':is(nav, aside, [data-slot="sidebar"], [data-sidebar="sidebar"], [data-sidebar="footer"], header) '
+            ':is(button, [role="button"]):is([data-slot="dropdown-menu-trigger"], [aria-haspopup="menu"], [data-sidebar="menu-button"], :has(img), :has([class*="avatar" i]))'
+        )
+        for btn in user_triggers.all():
+            if not btn.is_visible():
+                continue
+            for item in btn.locator('span, div, p').all():
+                if item.is_visible():
+                    name = _clean_account_label(item.inner_text())
+                    if name: return name
+            for img in btn.locator('img').all():
+                alt = (img.get_attribute('alt') or img.get_attribute('title') or '').strip()
+                name = _clean_account_label(alt)
+                if name: return name
+    except Exception:
+        pass
+
+    # 3. LocalStorage user info
+    try:
+        js_name = page.evaluate("""() => {
+            try {
+                for (let k of ['user_info', 'user', 'profile', 'flow_user_info']) {
+                    let v = localStorage.getItem(k);
+                    if (v) {
+                        let obj = JSON.parse(v);
+                        let n = obj.name || obj.nickname || obj.nick_name || obj.username || obj.display_name;
+                        if (n && typeof n === 'string') return n.trim();
+                    }
+                }
+            } catch(e) {}
+            return '';
+        }""")
+        name = _clean_account_label(js_name)
+        if name: return name
+    except Exception:
+        pass
+
     return ''
 
 
@@ -873,15 +954,26 @@ def _handle_facebook_oauth_tab(tab, report=None):
             'button:has-text("Tiếp tục dưới tên")',
             '[role="button"]:has-text("Tiếp tục dưới tên")',
             'div[role="button"]:has-text("Tiếp tục dưới tên")',
+            'button:has-text("Tiếp tục với tư cách")',
+            '[role="button"]:has-text("Tiếp tục với tư cách")',
+            'div[role="button"]:has-text("Tiếp tục với tư cách")',
             'button:has-text("Continue as")',
             '[role="button"]:has-text("Continue as")',
             'div[role="button"]:has-text("Continue as")',
+            'button:has-text("Đăng nhập bằng")',
+            '[role="button"]:has-text("Đăng nhập bằng")',
             'button:has-text("Tiếp tục")',
             '[role="button"]:has-text("Tiếp tục")',
             'div[role="button"]:has-text("Tiếp tục")',
             'button:has-text("Continue")',
             '[role="button"]:has-text("Continue")',
             'div[role="button"]:has-text("Continue")',
+            'button:has-text("Đồng ý")',
+            '[role="button"]:has-text("Đồng ý")',
+            'button:has-text("Xác nhận")',
+            '[role="button"]:has-text("Xác nhận")',
+            'button:has-text("Phê duyệt")',
+            '[role="button"]:has-text("Phê duyệt")',
             'button[name="__CONFIRM__"]',
             'button[value="1"]',
             '[aria-label*="Tiếp tục" i]',
@@ -1161,6 +1253,8 @@ def wait_for_dola_identity(context, cancel, report):
         check_cancel(cancel)
         pages = [tab for tab in context.pages if not tab.is_closed()]
         if not pages:
+            if stable_name:
+                return stable_name
             raise Cancelled('Đã đóng cửa sổ khi chưa nhận được tài khoản Dola.')
         name = ''
         has_fb_tab = any('facebook.com' in tab.url for tab in pages)
@@ -1178,18 +1272,21 @@ def wait_for_dola_identity(context, cancel, report):
                             last_fb_trigger = now
                             _trigger_facebook_login(context, tab, report)
                 name = dola_identity(tab)
-                if name and tab.locator(EDITOR).first.is_visible():
+                if not name and dola_account_present(tab):
+                    name = 'Tài khoản Dola'
+                if name:
                     break
-                name = ''
             except BrowserError:
                 continue
         if name != stable_name:
             stable_name, stable_since = name, time.monotonic()
-        if name and time.monotonic() - stable_since >= 2:
+        if name and time.monotonic() - stable_since >= 1.5:
             return name
         try:
             pages[0].wait_for_timeout(250)
         except BrowserError:
+            if stable_name:
+                return stable_name
             raise Cancelled('Đã đóng cửa sổ khi chưa nhận được tài khoản Dola.')
 
 
@@ -1258,6 +1355,7 @@ def register_dola_account(settings, account, cancel, report, profiles_root, init
             name = wait_for_dola_identity(context, cancel, report)
             result = dict(account, name=name, selected=True, connection='Phiên hợp lệ',
                           session_verified_at=time.time())
+            save_live_session(context, cfg, result)
         confirmed = True
         return result
     finally:
@@ -1306,6 +1404,7 @@ def register_gpm_account(settings, account, cancel, report, initial_cookies=None
                     report('Đã nhận tên Dola; GPM chưa đổi được tên profile. Tool vẫn lưu đúng tên tài khoản và GPM ID.')
                 result = dict(pending, name=name, selected=True, connection='Phiên hợp lệ',
                               session_verified_at=time.time())
+                save_live_session(context, settings, result)
                 confirmed = True
             finally:
                 if context is not None:
@@ -1499,6 +1598,9 @@ def check_task_session(context,page,steps,settings,account,cancel,report):
             elif account.get('cookie_kind') == 'dola' and account.get('cookie_file'):
                 report('Trang đã tải nhưng không thấy tên/avatar; import lại cookie tài khoản ngay.')
                 name=restore_cookie_session(context,settings,account,cancel,report,attempts=2,page=page)
+            elif account.get('cookie_file') and Path(account['cookie_file']).exists():
+                report('Trang đã tải nhưng không thấy tên/avatar; import lại cookie tài khoản Facebook ngay.')
+                name=authenticate_cookie_context(context,settings,account,cancel,report,page=page)
             else:
                 raise SessionDead('Profile chưa đăng nhập và không có cookie Dola; chuyển profile khác.')
         else:
