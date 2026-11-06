@@ -227,6 +227,44 @@ class TestFacebookBrowserLogin(unittest.TestCase):
         confirm_btn.click.assert_called_once()
         fb_btn.click.assert_called_once()
 
+    def test_handle_facebook_oauth_tab_error_body(self):
+        tab = MagicMock()
+        tab.url = 'https://www.facebook.com/dialog/oauth?client_id=123'
+        tab.inner_text.return_value = 'Sorry, something went wrong. Please try closing and re-opening your browser window.'
+        reports = []
+        handled = _handle_facebook_oauth_tab(tab, report=reports.append)
+        self.assertFalse(handled)
+        self.assertTrue(any('Sorry, something went wrong' in r for r in reports))
+
+    def test_handle_facebook_oauth_tab_password_prompt(self):
+        tab = MagicMock()
+        tab.url = 'https://www.facebook.com/dialog/oauth?client_id=123'
+        tab.inner_text.return_value = 'Log in to Facebook'
+        pwd_locator = MagicMock()
+        pwd_locator.count.return_value = 1
+        pwd_input = MagicMock()
+        pwd_input.is_visible.return_value = True
+        pwd_locator.nth.return_value = pwd_input
+
+        def locator_side_effect(selector):
+            loc = MagicMock()
+            if 'password' in selector or 'pass' in selector:
+                return pwd_locator
+            loc.count.return_value = 0
+            return loc
+
+        tab.locator.side_effect = locator_side_effect
+        reports = []
+        handled = _handle_facebook_oauth_tab(tab, report=reports.append)
+        self.assertFalse(handled)
+        self.assertTrue(any('yêu cầu nhập mật khẩu' in r for r in reports))
+
+    def test_facebook_cookie_domain_normalization(self):
+        line = '[{"name": "c_user", "value": "123", "domain": "www.facebook.com"}, {"name": "xs", "value": "abc", "domain": "facebook.com"}]'
+        cookies = parse_facebook_cookie_line(line)
+        for c in cookies:
+            self.assertEqual(c['domain'], '.facebook.com')
+
 
 if __name__ == '__main__':
     unittest.main()

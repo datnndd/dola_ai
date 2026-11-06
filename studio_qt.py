@@ -2259,6 +2259,55 @@ class Studio(QMainWindow):
                                'proxy_mode': mode, 'browser_backend': backend},
                               cookies, 'Đã hủy hoặc đóng cửa sổ; chưa lưu tài khoản này.')
 
+    def start_facebook_cookie_batch(self, built, backend='chrome'):
+        if not built:
+            return
+        concurrency = max(1, min(int(self.settings.get('concurrency', 2)), 2))
+        self.log(f'Bắt đầu nạp {len(built)} tài khoản Facebook cookie (mở tối đa {concurrency} cửa sổ đồng thời)…')
+        def run_batch():
+            def process_one(item):
+                cookies, proxy, mode = item
+                aid = uuid.uuid4().hex
+                account = {
+                    'id': aid,
+                    'profile': str(DATA / 'profiles' / aid),
+                    'proxy': proxy,
+                    'proxy_mode': mode,
+                    'browser_backend': backend,
+                }
+                cfg = copy.deepcopy(self.settings)
+                cancel = threading.Event()
+                self.account_jobs[aid] = cancel
+                self.request_accounts_paint()
+                saved = None
+                message = ''
+                try:
+                    saved = register_dola_account(
+                        cfg, account, cancel,
+                        lambda s: self.events.put(('log', s)),
+                        DATA / 'profiles',
+                        initial_cookies=cookies
+                    )
+                    if saved and cookies:
+                        try:
+                            saved['cookie_file'] = save_cookies(DATA / 'cookie_vault', aid, cookies)
+                            self.events.put(('log', 'Đã lưu bản cookie Facebook mã hóa cho tài khoản; dùng Cookie ↻ để nạp lại khi cần.'))
+                        except Exception:
+                            self.events.put(('log', 'Đã đăng nhập nhưng chưa lưu được bản cookie Facebook riêng. Phiên trong profile vẫn được giữ.'))
+                except Cancelled:
+                    message = 'Đã hủy hoặc đóng cửa sổ; chưa lưu tài khoản này.'
+                except Exception as exc:
+                    message = safe_login_error(exc)
+                self.events.put(('registered_account', aid, saved, message))
+
+            with ThreadPoolExecutor(max_workers=concurrency) as executor:
+                for future in as_completed([executor.submit(process_one, item) for item in built]):
+                    try:
+                        future.result()
+                    except Exception as e:
+                        self.events.put(('log', f'Lỗi khi xử lý tài khoản Facebook cookie: {e}'))
+        self.run_background(run_batch)
+
     def commit_accounts(self, added, message):
         for account in added:
             account.setdefault('browser_backend', 'hidemium' if self.settings.get('use_hidemium') else 'chrome')
@@ -3271,9 +3320,7 @@ class FacebookBatchDialog(AccountFormDialog):
             self.say('Nhập từ 1 đến 50 dòng cookie.'); return
         def apply(built):
             self.accept()
-            self.app.log(f'Mở {len(built)} cửa sổ để đăng nhập Facebook → Dola. Đăng nhập từng cửa sổ; đóng cửa sổ nào thì tài khoản đó dừng.')
-            for cookies, proxy, mode in built:
-                self.app.start_facebook_cookie_login(cookies, proxy, mode, backend)
+            self.app.start_facebook_cookie_batch(built, backend)
         self.background(lambda: build_facebook_cookie_accounts(lines, proxy_lines), apply,
                         'Đang đọc cookie…', 'Không đọc được cookie Facebook.')
 

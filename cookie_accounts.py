@@ -187,7 +187,9 @@ def parse_facebook_cookie_line(line):
         if not isinstance(item,dict) or not isinstance(item.get('name'),str) or not isinstance(item.get('value'),str):
             raise ValueError('Cookie Facebook cần name và value hợp lệ.')
         domain=str(item.get('domain') or urlsplit(item.get('url','')).hostname or '.facebook.com').lower()
-        if not domain.startswith('.'):
+        if domain.endswith('facebook.com'):
+            domain = '.facebook.com'
+        elif not domain.startswith('.'):
             domain = '.' + domain
         if not re.fullmatch(r'(?:\.[a-z0-9-]+)*\.facebook\.com',domain):
             raise ValueError('Chỉ nhận cookie thuộc facebook.com.')

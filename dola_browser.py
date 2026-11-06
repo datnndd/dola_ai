@@ -848,6 +848,27 @@ def _handle_facebook_oauth_tab(tab, report=None):
     try:
         if 'facebook.com' not in tab.url:
             return False
+
+        # 1. Phát hiện nếu Facebook báo lỗi phiên ("Sorry, something went wrong" / "Rất tiếc, đã xảy ra lỗi")
+        try:
+            body_text = tab.inner_text('body', timeout=1000).lower()
+            if 'sorry, something went wrong' in body_text or 'đã xảy ra lỗi' in body_text:
+                if report:
+                    report('Facebook báo lỗi phiên (Sorry, something went wrong). Cookie có thể đã hết hạn hoặc không hợp lệ.')
+                return False
+        except Exception:
+            pass
+
+        # 2. Nếu Facebook đang hiện form đăng nhập email/mật khẩu -> cookie không còn dùng được
+        try:
+            pwd = tab.locator('input[type="password"], input[name="pass"]')
+            if pwd.count() > 0 and any(pwd.nth(i).is_visible() for i in range(min(pwd.count(), 2))):
+                if report:
+                    report('Facebook yêu cầu nhập mật khẩu (cookie Facebook chưa đăng nhập được). Bạn có thể đăng nhập tay trên cửa sổ Facebook.')
+                return False
+        except Exception:
+            pass
+
         selectors = (
             'button:has-text("Tiếp tục dưới tên")',
             '[role="button"]:has-text("Tiếp tục dưới tên")',
@@ -863,7 +884,6 @@ def _handle_facebook_oauth_tab(tab, report=None):
             'div[role="button"]:has-text("Continue")',
             'button[name="__CONFIRM__"]',
             'button[value="1"]',
-            'button[type="submit"]',
             '[aria-label*="Tiếp tục" i]',
             '[aria-label*="Continue" i]',
         )
@@ -872,7 +892,10 @@ def _handle_facebook_oauth_tab(tab, report=None):
             if loc.count() and loc.first.is_visible():
                 if report:
                     report('Đang tự động xác nhận quyền đăng nhập Facebook…')
-                loc.first.click(timeout=2000)
+                try:
+                    loc.first.click(timeout=2000)
+                except Exception:
+                    loc.first.click(force=True)
                 return True
     except BrowserError:
         pass
@@ -1067,7 +1090,11 @@ def _trigger_facebook_login(context, page, report=None):
                 fb_btn.click(timeout=5000)
                 return True
             except Exception as exc:
-                report(f'Lỗi khi bấm nút Facebook ({exc})')
+                try:
+                    fb_btn.click(force=True, timeout=3000)
+                    return True
+                except Exception:
+                    report(f'Lỗi khi bấm nút Facebook ({exc})')
 
         # 2. Kiểm tra modal/overlay có đang mở không. Nếu chưa mở mới bấm nút "Đăng nhập" ở thanh tiêu đề
         dialog_overlay = page.locator(
@@ -1091,7 +1118,10 @@ def _trigger_facebook_login(context, page, report=None):
                 try:
                     login_btn.first.click(timeout=3000)
                 except Exception:
-                    pass
+                    try:
+                        login_btn.first.click(force=True, timeout=2000)
+                    except Exception:
+                        pass
 
         # 3. Chờ tối đa 8 giây để nút Facebook xuất hiện và bấm
         deadline = time.monotonic() + 8.0
@@ -1108,8 +1138,12 @@ def _trigger_facebook_login(context, page, report=None):
                     fb_btn.click(timeout=5000)
                     return True
                 except Exception as exc:
-                    report(f'Lỗi khi bấm nút Facebook ({exc})')
-                    return False
+                    try:
+                        fb_btn.click(force=True, timeout=3000)
+                        return True
+                    except Exception:
+                        report(f'Lỗi khi bấm nút Facebook ({exc})')
+                        return False
             page.wait_for_timeout(250)
 
         report('Chưa thấy biểu tượng Facebook sau khi mở đăng nhập; bạn hãy bấm biểu tượng Facebook trên Dola.')
@@ -1129,15 +1163,16 @@ def wait_for_dola_identity(context, cancel, report):
         if not pages:
             raise Cancelled('Đã đóng cửa sổ khi chưa nhận được tài khoản Dola.')
         name = ''
+        has_fb_tab = any('facebook.com' in tab.url for tab in pages)
         for tab in pages:
             try:
                 if 'facebook.com' in tab.url:
                     _handle_facebook_oauth_tab(tab, report)
                 else:
                     _handle_age_confirmation(tab, report)
-                if urlsplit(tab.url).hostname in ('dola.com', 'www.dola.com'):
+                if not has_fb_tab and urlsplit(tab.url).hostname in ('dola.com', 'www.dola.com'):
                     now = time.monotonic()
-                    if now - last_fb_trigger >= 3.0:
+                    if now - last_fb_trigger >= 15.0:
                         fb = _find_facebook_button(tab)
                         if fb:
                             last_fb_trigger = now
@@ -1344,7 +1379,8 @@ def authenticate_cookie_context(context, settings, account, cancel, report, page
             google = page.get_by_role('button', name=re.compile(r'^(Continue with Google|Sign in with Google|Đăng nhập bằng Google|Tiếp tục với Google)$', re.I))
             if facebook:
                 now = time.monotonic()
-                if not clicked_facebook or (now - last_fb_attempt >= 3.0):
+                has_fb_tab = any('facebook.com' in candidate.url for candidate in context.pages if not candidate.is_closed())
+                if not has_fb_tab and (not clicked_facebook or (now - last_fb_attempt >= 15.0)):
                     if _find_facebook_button(page) or not clicked_facebook:
                         last_fb_attempt = now
                         if _trigger_facebook_login(context, page, report):
