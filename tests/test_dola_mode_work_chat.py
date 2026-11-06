@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, call
 from seedance_ui import select_mode, prepare, form_flow
 from dola_limits import is_work_limit_reached
 from dola_browser import raise_if_credit_refused
-from account_health import CreditExhausted
+from account_health import CreditExhausted, WorkLimitReached
 
 
 class MockLocator:
@@ -322,7 +322,7 @@ class TestDolaModeWorkChat(unittest.TestCase):
 
             # Case 2: Pro mode with fallback already done -> raises CreditExhausted
             settings_done = {'dola_mode': 'pro', '_work_fallback_done': True}
-            with self.assertRaises(CreditExhausted):
+            with self.assertRaises(WorkLimitReached):
                 raise_if_credit_refused(page, task, lambda msg: reports.append(msg), settings=settings_done)
 
     def test_is_generation_in_progress_with_stop_button(self):

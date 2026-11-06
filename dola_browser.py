@@ -1625,8 +1625,8 @@ def is_generation_in_progress(page):
 
 
 def raise_if_credit_refused(page, task, report, settings=None):
-    from account_health import CreditExhausted, unlock_text
-    from dola_limits import insufficient_video_credits, retry_after, usage_limit_reached, is_work_limit_reached
+    from account_health import CreditExhausted, WorkLimitReached, RateLimitExceeded, unlock_text
+    from dola_limits import insufficient_video_credits, retry_after, usage_limit_reached, is_work_limit_reached, is_message_rate_limited
 
     # 1. Nếu quy trình tạo đang chạy -> KHÔNG báo lỗi thiếu điểm
     if is_generation_in_progress(page):
@@ -1641,10 +1641,21 @@ def raise_if_credit_refused(page, task, report, settings=None):
         pass
 
     text = credit_response_text(page, task)
+    if is_message_rate_limited(text):
+        until = retry_after(text)
+        when = unlock_text(until) if until else '5 phút sau'
+        report(f'Tài khoản bị giới hạn tần suất tin nhắn (Rate Limit) • mở lại {when} • dừng task để chuyển tài khoản khác.')
+        raise RateLimitExceeded(until)
+
     if settings and str(settings.get('dola_mode', 'pro')).strip().lower() == 'pro' and not settings.get('_work_fallback_done'):
         if is_work_limit_reached(text):
             return
-    if usage_limit_reached(text) or is_work_limit_reached(text):
+    if is_work_limit_reached(text):
+        until = retry_after(text)
+        when = unlock_text(until) if until else '00:00 hôm sau'
+        report(f'Tài khoản đạt giới hạn chế độ Work • mở lại {when} • chuyển tài khoản khác.')
+        raise WorkLimitReached(until)
+    if usage_limit_reached(text):
         until = retry_after(text)
         when = unlock_text(until) if until else '00:00 hôm sau'
         report(f'Hết lượt dùng Dola (đạt giới hạn) • tài khoản mở lại {when} • dừng task, không gửi lại yêu cầu.')

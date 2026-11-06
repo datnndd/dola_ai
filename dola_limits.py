@@ -43,6 +43,20 @@ def is_work_limit_reached(text):
     return False
 
 
+def is_message_rate_limited(text):
+    """Kiểm tra xem Dola có báo gửi tin nhắn quá nhanh / Too Many Requests hay không."""
+    value = _plain(text)
+    if not value:
+        return False
+    markers = (
+        'gui tin nhan qua nhanh', 'qua nhieu yeu cau', 'too many requests',
+        'rate limit', 'slow down', 'vui long thu lai sau vai phut',
+        'try again in a few minutes', 'tam thoi bi gioi han',
+        '429', 'request limit', 'message limit', 'try again later',
+    )
+    return any(m in value for m in markers)
+
+
 _VN_MONTHS = {'mot': 1, 'gieng': 1, 'hai': 2, 'ba': 3, 'tu': 4, 'bon': 4, 'nam': 5, 'sau': 6, 'bay': 7,
               'tam': 8, 'chin': 9, 'muoi': 10, 'muoi mot': 11, 'muoi hai': 12, 'chap': 12}
 _EN_MONTHS = {name: i for i, name in enumerate(

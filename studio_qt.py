@@ -13,7 +13,12 @@ from studio_core import (defaults, fresh_task, batch_blockers, list_gallery_vide
                          build_facebook_cookie_accounts, encode_dola_accounts, encode_google_accounts,
                          safe_login_error, task_output_path, load_keys, proxy_source,
                          rotation_status, rotator_for, run_rotation, stop_rotation,
-                         credit_until, unlock_text, lock_for_credits)
+                         credit_until, unlock_text, lock_for_credits,
+                         WorkLimitReached, RateLimitExceeded, is_work_limit_error, is_rate_limit_error,
+                         work_locked, rate_limited, lock_for_work, lock_for_rate_limit,
+                         release_account_locks, account_status_badge, is_account_available,
+                         rate_limit_text, work_lock_text,
+                         sort_accounts_by_lru, select_best_account, get_earliest_recovery_time)
 from task_logs import MAX_LINES_IN_TASK, TaskLogFiles, stamp
 from workspace_store import WorkspaceWriter, workspace_snapshot
 from studio_theme import (BG, PANEL, CARD, FIELD, BORDER, HOVER, TEXT, MUTED, DISABLED,
@@ -364,17 +369,47 @@ class Studio(QMainWindow):
         threading.Thread(target=work, daemon=True).start()
 
     def release_credit_locks(self):
-        released = release_credit_locks(self.accounts)
-        if released:
-            names = ', '.join(a.get('name', '') for a in released)
+        res = release_account_locks(self.accounts)
+        changed = False
+        if res.get('credits'):
+            names = ', '.join(a.get('name', '') for a in res['credits'])
             self.log(f'Qua 0h • mở lại tài khoản hết điểm: {names}')
-        rested = release_run_cooldowns(self.accounts)
-        if rested:
-            names = ', '.join(a.get('name', '') for a in rested)
+            changed = True
+        if res.get('work'):
+            names = ', '.join(a.get('name', '') for a in res['work'])
+            self.log(f'Mở lại chế độ Work: {names}')
+            changed = True
+        if res.get('rate_limits'):
+            names = ', '.join(a.get('name', '') for a in res['rate_limits'])
+            self.log(f'Hết Rate Limit • mở lại tài khoản: {names}')
+            changed = True
+        if res.get('cooldowns'):
+            names = ', '.join(a.get('name', '') for a in res['cooldowns'])
             self.log(f'Hết 1 tuần nghỉ • mở lại Dùng chạy cho: {names}')
-        if released or rested:
+            changed = True
+        if changed:
             self.later_save(); self.request_accounts_paint()
-        self.after(30000, self.release_credit_locks)
+        self.after(15000, self.release_credit_locks)
+
+    def open_dola_chat(self, target_account=None):
+        if self.running:
+            self.info('Đang chạy', 'Hệ thống đang chạy batch task. Vui lòng đợi batch kết thúc hoặc mở sau.')
+            return
+        if target_account is not None:
+            account = target_account
+        else:
+            account, _ = select_best_account(self.accounts, mode='chat')
+            if not account:
+                earliest = get_earliest_recovery_time(self.accounts, mode='chat')
+                msg = 'Hiện không có tài khoản Dola nào khả dụng để Chat.'
+                if earliest:
+                    msg += f'\nTài khoản có thể hồi phục sớm nhất vào lúc: {unlock_text(earliest)}'
+                else:
+                    msg += '\nVui lòng thêm tài khoản mới hoặc kiểm tra lại danh sách tài khoản.'
+                self.info('Không có tài khoản khả dụng', msg)
+                return
+        self.log(f"💬 Mở Chat Dola bằng tài khoản: {account.get('name', 'profile')}")
+        self.run_account_action(account, login=True, url='https://www.dola.com/chat')
 
     def request_accounts_paint(self):
         if self._accounts_paint is not None:
@@ -432,6 +467,7 @@ class Studio(QMainWindow):
                 b = QPushButton(text); b.setObjectName('nav'); b.setCursor(Qt.PointingHandCursor)
                 b.clicked.connect(fn); sl.addWidget(b); self.nav_buttons[key] = b
         nav('QUẢN LÝ', [('accounts', '♟   Tài khoản', self.account_dialog),
+                        ('chat_dola', '💬   Mở Chat Dola', self.open_dola_chat),
                         ('logs', '◒   Nhật ký', self.toggle_logs)])
         self.account_card = AccountSummary(self.account_dialog); sl.addWidget(self.account_card)
         self.proxy_card = ProxySummary(self.settings_dialog); sl.addWidget(self.proxy_card)
@@ -1303,9 +1339,10 @@ class Studio(QMainWindow):
         session_cache = {a['id']: {'name': a.get('name', ''), 'at': a.get('session_verified_at', 0), 'valid': True}
                          for a in accounts if a.get('session_verified_at')}
         session_cache_lock = threading.Lock()
-        account_order = list(accounts)
+        account_order = sort_accounts_by_lru(accounts)
         for a in account_order: available.put(a)
-        credit_locked_ids = set(); stopped_ids = set(); credit_lock = threading.Lock()
+        credit_locked_ids = set(); work_locked_ids = set(); rate_limited_ids = set()
+        stopped_ids = set(); credit_lock = threading.Lock()
         def assignment(task, account):
             task['last_account_id'] = (account or {}).get('id')
             options = task_settings(cfg, task)
@@ -1433,7 +1470,7 @@ class Studio(QMainWindow):
                         self.batch_totals['ok'] += error is None
                         self.events.put(('progress', self.batch_totals['done'], self.batch_totals['total']))
                 def usable(index):
-                    return account_order[index]['id'] not in credit_locked_ids | stopped_ids
+                    return account_order[index]['id'] not in credit_locked_ids | rate_limited_ids | stopped_ids
                 def settle_for(account):
                     def settle_account(task, path, error):
                         from dola_browser import ProfileStopped, SessionDead
@@ -1443,22 +1480,63 @@ class Studio(QMainWindow):
                             stopped_ids.add(account['id'])
                             if first and isinstance(error, SessionDead):
                                 self.events.put(('account_die', account['id'], str(error)))
-                        if error is None and cfg.get('cooldown_after_manual_run', False):
-                            self.events.put(('run_success', account['id']))
-                        if error is None or not is_credit_error(error):
+                        if error is None:
+                            self.events.put(('account_used', account['id']))
+                            if cfg.get('cooldown_after_manual_run', False):
+                                self.events.put(('run_success', account['id']))
+                        if is_work_limit_error(error):
+                            until = credit_until(error)
+                            with credit_lock:
+                                first = account['id'] not in work_locked_ids
+                                work_locked_ids.add(account['id'])
+                                has_work_available = any(usable(i) and account_order[i]['id'] not in work_locked_ids for i in range(len(account_order)))
+                            if first:
+                                self.events.put(('work_locked', account['id'], until))
+                            intake = self.live_intake
+                            if intake is not None and not self.cancel_event.is_set():
+                                again = next_attempt(task)
+                                if not has_work_available:
+                                    if 'options' not in again:
+                                        again['options'] = {}
+                                    again['options']['dola_mode'] = 'fast'
+                                    self.events.put(('log', f"⚠️ {account['name']} đạt giới hạn Work. Hết tài khoản Work khả dụng -> Tự động chuyển {task.get('name', 'task')} sang Chat"))
+                                    self.events.put(('status', task['id'], "Chuyển sang chế độ Chat do hết quota Work"))
+                                else:
+                                    self.events.put(('status', task['id'], f"Chờ chạy • {account['name']} giới hạn Work, chuyển tài khoản khác"))
+                                intake.put(again)
+                                return
                             return settle(task, path, error)
-                        with credit_lock:
-                            first = account['id'] not in credit_locked_ids
-                            credit_locked_ids.add(account['id'])
-                            retry = not self.cancel_event.is_set() and any(usable(i) for i in range(len(account_order)))
-                        if first or credit_until(error):
-                            self.events.put(('credit_locked', account['id'], credit_until(error)))
-                        intake = self.live_intake
-                        if retry and intake is not None:
-                            again = next_attempt(task)
-                            self.events.put(('status', task['id'], f"Chờ chạy • {account['name']} hết điểm, chuyển tài khoản kế tiếp"))
-                            intake.put(again); return
-                        settle(task, path, error)
+                        if is_rate_limit_error(error):
+                            until = credit_until(error)
+                            with credit_lock:
+                                first = account['id'] not in rate_limited_ids
+                                rate_limited_ids.add(account['id'])
+                                retry = not self.cancel_event.is_set() and any(usable(i) for i in range(len(account_order)))
+                            if first:
+                                self.events.put(('rate_limited', account['id'], until))
+                            intake = self.live_intake
+                            if retry and intake is not None:
+                                again = next_attempt(task)
+                                self.events.put(('status', task['id'], f"Chờ chạy • {account['name']} bị Rate Limit, chuyển tài khoản kế tiếp"))
+                                intake.put(again)
+                                return
+                            return settle(task, path, error)
+                        if is_credit_error(error):
+                            until = credit_until(error)
+                            with credit_lock:
+                                first = account['id'] not in credit_locked_ids
+                                credit_locked_ids.add(account['id'])
+                                retry = not self.cancel_event.is_set() and any(usable(i) for i in range(len(account_order)))
+                            if first or until:
+                                self.events.put(('credit_locked', account['id'], until))
+                            intake = self.live_intake
+                            if retry and intake is not None:
+                                again = next_attempt(task)
+                                self.events.put(('status', task['id'], f"Chờ chạy • {account['name']} hết điểm, chuyển tài khoản kế tiếp"))
+                                intake.put(again)
+                                return
+                            return settle(task, path, error)
+                        return settle(task, path, error)
                     return settle_account
                 def drain_live():
                     found = []; intake = self.live_intake
@@ -1469,10 +1547,21 @@ class Studio(QMainWindow):
                         except queue.Empty: return found
                 def run_round(initial):
                     def allowed(index, task):
+                        acc_id = account_order[index]['id']
+                        opts = task_settings(cfg, task)
+                        is_pro = opts.get('dola_mode') == 'pro'
+                        if is_pro and acc_id in work_locked_ids:
+                            if any(usable(i) and account_order[i]['id'] not in work_locked_ids for i in range(len(account_order))):
+                                return False
+                            if 'options' not in task:
+                                task['options'] = {}
+                            task['options']['dola_mode'] = 'fast'
+                            self.events.put(('log', f"⚡ Tất cả tài khoản hết giới hạn Work • Tự động chuyển {task.get('name', 'task')} sang chế độ Chat"))
+
                         eligible = [a for i, a in enumerate(account_order) if usable(i)]
                         previous = task.get('last_account_id')
                         return (task.get('run_action') == 'resume' or len(eligible) < 2
-                                or previous != account_order[index]['id'])
+                                or previous != acc_id)
                     def run(index, group):
                         account = account_order[index]
                         def browser_report(message):
@@ -1655,6 +1744,27 @@ class Studio(QMainWindow):
                             self.log(f"{account.get('name', '')}: {reason} • bỏ chọn Dùng chạy, "
                                      f"tự mở lại lúc {unlock_text(reopen)}.")
                     self.later_save(); self.request_accounts_paint()
+                elif kind == 'work_locked':
+                    for account in self.accounts:
+                        if account['id'] == event[1]:
+                            until = event[2] if len(event) > 2 else None
+                            reopen = lock_for_work(account, until=until)
+                            self.log(f"{account.get('name', '')}: giới hạn chế độ Work • "
+                                     f"vẫn dùng được Chat, tự mở lại Work lúc {unlock_text(reopen)}.")
+                    self.later_save(); self.request_accounts_paint()
+                elif kind == 'rate_limited':
+                    for account in self.accounts:
+                        if account['id'] == event[1]:
+                            until = event[2] if len(event) > 2 else None
+                            reopen = lock_for_rate_limit(account, until=until)
+                            self.log(f"{account.get('name', '')}: Rate Limit • "
+                                     f"tạm khóa, tự mở lại lúc {unlock_text(reopen)}.")
+                    self.later_save(); self.request_accounts_paint()
+                elif kind == 'account_used':
+                    for account in self.accounts:
+                        if account['id'] == event[1]:
+                            account['last_used_at'] = time.time()
+                    self.later_save()
                 elif kind == 'run_success':
                     for account in self.accounts:
                         if account['id'] == event[1]:
@@ -1671,6 +1781,8 @@ class Studio(QMainWindow):
                                            live_checked_at=time.time(), connection='Die • Không khôi phục được phiên Dola')
                             account.pop('credit_locked_until', None)
                             account.pop('credit_restore_selected', None)
+                            account.pop('work_locked_until', None)
+                            account.pop('rate_limited_until', None)
                             account.pop('run_cooldown_until', None)
                             self.log(f"{account.get('name', '')}: đã đánh dấu die, bỏ khỏi các lượt chạy. {event[2]}")
                     self.later_save(); self.request_accounts_paint()
@@ -2213,6 +2325,8 @@ ACCOUNT_STATES = {
     'busy': ('Đang xử lý', CYAN, ACTIVE_BG),
     'live': ('Live', GREEN, SUCCESS_BG),
     'credit': ('Hết điểm', WARNING, WARNING_BG),
+    'work_limit': ('Giới hạn Work (chỉ Chat)', CYAN, ACTIVE_BG),
+    'rate_limit': ('Rate Limit', WARNING, WARNING_BG),
     'rest': ('Nghỉ 7 ngày', CYAN, ACTIVE_BG),
     'die': ('Die', RED, ERROR_BG),
     'error': ('Lỗi kết nối', WARNING, WARNING_BG),
@@ -2226,8 +2340,10 @@ def account_state(account, busy=False):
     low = conn.casefold()
     if busy or low.startswith('đang'): return 'busy'
     if credit_locked(account): return 'credit'
+    if rate_limited(account): return 'rate_limit'
     if account.get('live_state') == 'die' or low.startswith('die'): return 'die'
     if run_cooldown_locked(account): return 'rest'
+    if work_locked(account): return 'work_limit'
     if account.get('live_state') == 'live' or 'hợp lệ' in low or low.startswith('live'): return 'live'
     if 'lỗi' in low: return 'error'
     return 'unknown'
@@ -2237,6 +2353,10 @@ def account_detail(account):
     """Dòng phụ: chi tiết trạng thái (bỏ phần đã có trên nhãn)."""
     if credit_locked(account):
         return credit_lock_text(account)
+    if rate_limited(account):
+        return rate_limit_text(account)
+    if work_locked(account):
+        return work_lock_text(account)
     if run_cooldown_locked(account):
         return run_cooldown_text(account)
     conn = str(account.get('connection') or '')
@@ -3262,10 +3382,12 @@ class AccountRow(QFrame):
         self.cookie = _btn('Cookie ↻', lambda: app.start_cookie_accounts([self.account()]))
         self.cookie.setToolTip('Nạp lại cookie đã lưu cho tài khoản này')
         self.hidemium = _btn('Hidemium UUID', lambda: app.hidemium_profile_dialog(self.account()))
+        self.chat = _btn('💬 Chat', lambda: app.open_dola_chat(self.account()))
         self.buttons = [self.cookie,
                         _btn('Đổi tên', lambda: app.rename_account_dialog(self.account())),
                         _btn('Proxy', lambda: app.proxy_dialog(self.account())),
                         self.hidemium,
+                        self.chat,
                         _btn('Mở/Đăng nhập', lambda: app.run_account_action(self.account(), True)),
                         _btn('Kiểm tra', lambda: app.run_account_action(self.account(), False)),
                         _btn('Xóa phiên', lambda: dialog.remove([self.account()]), color=RED)]
@@ -3283,7 +3405,8 @@ class AccountRow(QFrame):
         self.name.setText(name)
         detail = account_detail(account)
         self.sub.setText('Proxy: ' + proxy_mode_text(account) + (f'  •  {detail}' if detail else ''))
-        self.sub.setToolTip(str(account.get('connection') or ''))
+        badge = account_status_badge(account, busy)
+        self.sub.setToolTip(f"{account.get('connection') or ''}\nTrạng thái: {badge['text']}")
         key = account_state(account, busy)
         _style_pill(self.state, *ACCOUNT_STATES[key])
         for box, value in ((self.pick, picked), (self.run, bool(account.get('selected', True)))):
@@ -3309,12 +3432,14 @@ class AccountRow(QFrame):
         account['selected'] = on
         if on:
             account.pop('credit_locked_until', None)  # tick tay bỏ khóa hết điểm
+            account.pop('work_locked_until', None)    # tick tay bỏ khóa work
+            account.pop('rate_limited_until', None)   # tick tay bỏ khóa rate limit
             account.pop('run_cooldown_until', None)   # tick tay bỏ nghỉ 1 tuần sau khi chạy
         self.dialog.app.later_save(); self.dialog.app.request_accounts_paint()
 
 
 class AccountsDialog(QDialog):
-    FILTERS = [('all', 'Tất cả'), ('live', 'Live'), ('die', 'Die'), ('credit', 'Hết điểm'), ('rest', 'Nghỉ 7 ngày'), ('unknown', 'Chưa kiểm tra')]
+    FILTERS = [('all', 'Tất cả'), ('live', 'Live'), ('die', 'Die'), ('credit', 'Hết điểm'), ('work_limit', 'Giới hạn Work'), ('rate_limit', 'Rate Limit'), ('rest', 'Nghỉ 7 ngày'), ('unknown', 'Chưa kiểm tra')]
 
     def __init__(self, app):
         super().__init__(app); self.app = app
@@ -3370,7 +3495,7 @@ class AccountsDialog(QDialog):
         bar.addWidget(_btn('Xóa profile die', lambda: self.app.delete_dead_profiles(), color=RED))
         bar.addWidget(_btn('Đóng cửa sổ trình duyệt đang mở', lambda: self.app.cancel_account_actions()))
         bar.addWidget(_btn('Liên kết từ bản gốc', lambda: self.app.import_original_accounts()))
-        bar.addWidget(_btn('Mở Dola', lambda: webbrowser.open('https://www.dola.com/chat')))
+        bar.addWidget(_btn('💬 Mở Chat Dola', lambda: self.app.open_dola_chat()))
         bar.addStretch(1)
         bar.addWidget(_btn('Đóng', self.accept))
         lay.addLayout(bar)
@@ -3403,7 +3528,7 @@ class AccountsDialog(QDialog):
 
     @staticmethod
     def _bucket(key):
-        return key if key in ('live', 'die', 'credit', 'rest') else 'unknown'
+        return key if key in ('live', 'die', 'credit', 'work_limit', 'rate_limit', 'rest') else 'unknown'
 
     def set_filter(self, key):
         self.filter = key; self.apply_filter()
