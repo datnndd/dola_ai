@@ -562,7 +562,7 @@ class Studio(QMainWindow):
         phead.addWidget(self.quick_ratio)
         phead.addWidget(_muted('Chế độ:'))
         self.quick_mode = QComboBox()
-        self.quick_mode_values = {'Pro': 'pro', 'Fast': 'fast', 'Skill 30s': 'skill30'}
+        self.quick_mode_values = {'Pro (Work)': 'pro', 'Skill 30s': 'skill30'}
         self.quick_mode.addItems(list(self.quick_mode_values))
         phead.addWidget(self.quick_mode)
         self.sync_quick_settings_ui()
@@ -1559,16 +1559,11 @@ class Studio(QMainWindow):
                             intake = self.live_intake
                             if intake is not None and not self.cancel_event.is_set():
                                 again = next_attempt(task)
-                                if not has_work_available:
-                                    if 'options' not in again:
-                                        again['options'] = {}
-                                    again['options']['dola_mode'] = 'fast'
-                                    self.events.put(('log', f"⚠️ {account['name']} đạt giới hạn Work. Hết tài khoản Work khả dụng -> Tự động chuyển {task.get('name', 'task')} sang Chat"))
-                                    self.events.put(('status', task['id'], "Chuyển sang chế độ Chat do hết quota Work"))
-                                else:
+                                if has_work_available:
                                     self.events.put(('status', task['id'], f"Chờ chạy • {account['name']} giới hạn Work, chuyển tài khoản khác"))
-                                intake.put(again)
-                                return
+                                    intake.put(again)
+                                    return
+                                self.events.put(('log', f"⚠️ {account['name']} đạt giới hạn Work. Hết tài khoản Work khả dụng -> Dừng task."))
                             return settle(task, path, error)
                         if is_rate_limit_error(error):
                             until = credit_until(error)
@@ -1615,12 +1610,7 @@ class Studio(QMainWindow):
                         opts = task_settings(cfg, task)
                         is_pro = opts.get('dola_mode') == 'pro'
                         if is_pro and acc_id in work_locked_ids:
-                            if any(usable(i) and account_order[i]['id'] not in work_locked_ids for i in range(len(account_order))):
-                                return False
-                            if 'options' not in task:
-                                task['options'] = {}
-                            task['options']['dola_mode'] = 'fast'
-                            self.events.put(('log', f"⚡ Tất cả tài khoản hết giới hạn Work • Tự động chuyển {task.get('name', 'task')} sang chế độ Chat"))
+                            return False
 
                         eligible = [a for i, a in enumerate(account_order) if usable(i)]
                         previous = task.get('last_account_id')
@@ -2647,7 +2637,7 @@ class PromptDialog(QDialog):
 
 
 class ConfigDialog(QDialog):
-    MODE_LABELS = {'pro': 'Pro', 'fast': 'Fast', 'skill30': 'Skill 30s'}
+    MODE_LABELS = {'pro': 'Pro (Chế độ Work)', 'skill30': 'Skill 30s'}
     DURATION_LABELS = {
         '5': '5 giây',
         '10': '10 giây',

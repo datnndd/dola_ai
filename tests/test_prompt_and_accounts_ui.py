@@ -70,11 +70,11 @@ class PromptAndAccountsUITests(unittest.TestCase):
         self.win.quick_model.setCurrentText('Seedance 2.5')
         self.win.quick_duration.setCurrentText('30s · ghép 2 × 15s')
         self.win.quick_ratio.setCurrentText('16:9')
-        self.win.quick_mode.setCurrentText('Fast')
+        self.win.quick_mode.setCurrentText('Skill 30s')
         self.assertEqual(self.win.settings['model'], 'Seedance 2.5')
         self.assertEqual(self.win.settings['duration'], '30')
         self.assertEqual(self.win.settings['ratio'], '16:9')
-        self.assertEqual(self.win.settings['dola_mode'], 'fast')
+        self.assertEqual(self.win.settings['dola_mode'], 'skill30')
 
         # Adding first prompt reuses the initial untouched Task #1
         self.win.quick_prompt.setPlainText('Cảnh hoàng hôn trên biển 4K')

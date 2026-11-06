@@ -485,12 +485,6 @@ class AutoJobs:
                     self.journal.data['tasks'][task['id']]['last_account_id'] = account['id']
                     self.journal.save()
         cfg = task_settings(self.settings, task)
-        from account_health import work_locked
-        if work_locked(account) and str(cfg.get('dola_mode', 'pro')).strip().lower() == 'pro':
-            cfg['dola_mode'] = 'fast'
-            if 'options' not in task or not isinstance(task.get('options'), dict):
-                task['options'] = {}
-            task['options']['dola_mode'] = 'fast'
         proxy_server = resolve_proxy_server(self.settings, account)
         self.emit('task_execution', task['id'], dict(model=cfg['model'],duration=cfg['duration'],
             account_id=account['id'],account_name=account['name'],proxy_server=proxy_server))

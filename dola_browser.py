@@ -1684,15 +1684,10 @@ def raise_if_credit_refused(page, task, report, settings=None):
         raise RateLimitExceeded(until)
 
     if is_work_limit_reached(text):
-        if settings and str(settings.get('dola_mode', 'pro')).strip().lower() != 'pro':
-            pass
-        elif settings and str(settings.get('dola_mode', 'pro')).strip().lower() == 'pro' and not settings.get('_work_fallback_done'):
-            return
-        else:
-            until = retry_after(text)
-            when = unlock_text(until) if until else '00:00 hôm sau'
-            report(f'Tài khoản đạt giới hạn chế độ Work • mở lại {when} • chuyển tài khoản khác.')
-            raise WorkLimitReached(until)
+        until = retry_after(text)
+        when = unlock_text(until) if until else '00:00 hôm sau'
+        report(f'Tài khoản đạt giới hạn chế độ Work • mở lại {when} • chuyển tài khoản khác.')
+        raise WorkLimitReached(until)
     if usage_limit_reached(text):
         until = retry_after(text)
         when = unlock_text(until) if until else '00:00 hôm sau'
@@ -2538,14 +2533,11 @@ def render_dola_steps(task, settings, account, cancel, report, session_cache=Non
     settings = prepare_account_settings(settings, account, cancel, report)
     check_cancel(cancel)
     settings = dict(settings or {})
-    from account_health import work_locked, unlock_text
+    from account_health import work_locked, unlock_text, WorkLimitReached
     if work_locked(account) and str(settings.get('dola_mode', 'pro')).strip().lower() == 'pro':
         when = unlock_text(account.get('work_locked_until'))
-        report(f"Tài khoản {account.get('name', '')} đang trong thời gian giới hạn chế độ Work (đến {when}) • tự động chuyển thẳng sang chế độ Chat bình thường.")
-        settings['dola_mode'] = 'fast'
-        settings['_work_fallback_done'] = True
-        if task and 'options' in task and isinstance(task.get('options'), dict):
-            task['options']['dola_mode'] = 'fast'
+        report(f"Tài khoản {account.get('name', '')} đang trong thời gian giới hạn chế độ Work (đến {when}) • dừng task để chuyển tài khoản khác.")
+        raise WorkLimitReached(account.get('work_locked_until'))
     from seedance_30s import enabled as merge30_enabled, prompts as prompts30
     merge30 = merge30_enabled(settings)
     export_settings = dict(settings)
@@ -2740,7 +2732,7 @@ def render_dola_steps(task, settings, account, cancel, report, session_cache=Non
                     last_scroll = elapsed
                 # Kiểm tra nếu chế độ Work bị giới hạn -> tự động hoàn thành trên chế độ Chat bình thường
                 is_pro_mode = str(settings.get('dola_mode', 'pro')).strip().lower() == 'pro'
-                if is_pro_mode and not settings.get('_work_fallback_done'):
+                if is_pro_mode:
                     if not is_generation_in_progress(page) and not genuine_video_url(page, video_baseline) and not scan_files(page, file_baseline).get('count'):
                         resp_text = credit_response_text(page, task)
                         _fr, asst_txt = current_assistant_reply(page, reply_baseline)
@@ -2750,58 +2742,13 @@ def render_dola_steps(task, settings, account, cancel, report, session_cache=Non
                         if check_txt and is_work_limit_reached(check_txt):
                             until = retry_after(check_txt)
                             report(f'[Khóa Work] {until or ""}')
-                            report('Chế độ Work đã đạt giới hạn; tự động chuyển sang chế độ Chat bình thường để hoàn thành…')
-                            settings['dola_mode'] = 'fast'
-                            settings['_work_fallback_done'] = True
-                            task['options'] = dict(task.get('options') or {}, dola_mode='fast')
                             if account:
                                 from account_availability import lock_for_work
                                 lock_for_work(account, until)
-
-                            # 1. Bấm nút chuyển sang Chat nếu có sẵn trên giao diện/popup
-                            switch_selectors = (
-                                'button:has-text("Chuyển sang Chat"):visible, '
-                                'button:has-text("Switch to Chat"):visible, '
-                                'button:has-text("Dùng Chat"):visible, '
-                                'button:has-text("Tiếp tục với Chat"):visible'
-                            )
-                            sw_btn = page.locator(switch_selectors)
-                            if sw_btn.count() and sw_btn.first.is_visible():
-                                steps.click(sw_btn.first)
-                                steps.wait(1)
-
-                            # 2. Đảm bảo nút chuyển chế độ ở ô nhập đã chuyển sang Chat
-                            from seedance_ui import select_mode as ui_select_mode
-                            ui_select_mode(page, 'fast', steps)
-
-                            # 3. Gửi lại prompt trong chế độ Chat
-                            editor = page.locator(EDITOR).first
-                            steps.wait_until(lambda: editor.is_visible(), 20, 'Chưa thấy ô nhập prompt để gửi lại trong chế độ Chat.')
-                            prompt_task = dict(task, prompt=prompts30(task['prompt'])[0]) if merge30 else task
-                            chat_prompt = build_prompt(prompt_task, settings)
-                            steps.type_prompt(editor, chat_prompt)
-                            reply_baseline = {'assistant': assistant_snapshot(page),
-                                              'shares': action_bar_count(page)}
-                            video_baseline = set(active_video_urls(page))
-                            file_baseline = scan_files(page).get('keys', [])
-                            tracker.reset()
-                            media_receipt(page)
-                            steps.submit(editor)
-                            report('Đã gửi lại yêu cầu bằng chế độ Chat; tiếp tục chờ video…')
-                            steps.wait(5)
-                            video_seen = False
-                            video_received = False
-                            video_seen_at = 0
-                            link_stuck_since = 0
-                            link_f5_count = 0
-                            confirmation_count = 0
-                            looking_since = 0
-                            text_only_since = 0
-                            images_only_since = 0
-                            treat_as_images = False
-                            start = time.monotonic()
-                            paused_at_start = steps.paused
-                            continue
+                            from account_health import WorkLimitReached, unlock_text
+                            when = unlock_text(until) if until else '00:00 hôm sau'
+                            report(f'Tài khoản đạt giới hạn chế độ Work • mở lại {when} • chuyển tài khoản khác.')
+                            raise WorkLimitReached(until)
 
                 # Detect credit refusals before confirmation, player interaction
                 # or download polling. Split bubbles are joined; the prompt is excluded.

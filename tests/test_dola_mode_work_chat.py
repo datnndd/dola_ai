@@ -222,7 +222,7 @@ class TestDolaModeWorkChat(unittest.TestCase):
         self.assertFalse(is_work_limit_reached('Không đủ điểm tín dụng để tạo video. Cần 10 điểm nhưng bạn còn 0 điểm.'))
         self.assertFalse(is_work_limit_reached('Video đang được tạo, vui lòng đợi...'))
 
-    def test_select_mode_falls_back_to_chat_when_work_is_disabled(self):
+    def test_select_mode_raises_when_work_is_disabled(self):
         trigger = MockLocator(text='⚡ Chat >', visible=True)
         # Work option is marked as disabled or having limit
         work_option = MockLocator(text='Work\nĐạt giới hạn 0/5', visible=True, aria_disabled='true')
@@ -260,9 +260,9 @@ class TestDolaModeWorkChat(unittest.TestCase):
         page.get_by_text.return_value = MockLocator(visible=False)
 
         reports = []
-        result = select_mode(page, 'pro', steps, report=lambda msg: reports.append(msg))
-        self.assertEqual(result, 'fast')
-        self.assertIn(chat_option, steps.clicked)
+        with self.assertRaises(RuntimeError):
+            select_mode(page, 'pro', steps, report=lambda msg: reports.append(msg))
+        self.assertNotIn(chat_option, steps.clicked)
         self.assertTrue(any('Chế độ Work đang bị khóa/hết hạn mức' in r for r in reports))
 
     def test_prepare_updates_settings_when_work_fallback_occurs(self):
@@ -299,11 +299,8 @@ class TestDolaModeWorkChat(unittest.TestCase):
 
         settings = {'dola_mode': 'pro', 'duration': '15', 'seedance_flow': 'auto'}
         reports = []
-        prepare(page, settings, steps, lambda msg: reports.append(msg))
-
-        self.assertEqual(settings['dola_mode'], 'fast')
-        self.assertTrue(settings.get('_work_fallback_done'))
-        self.assertTrue(any('Chế độ Chat đã sẵn sàng' in r for r in reports))
+        with self.assertRaises(RuntimeError):
+            prepare(page, settings, steps, lambda msg: reports.append(msg))
 
     def test_raise_if_credit_refused_defers_for_work_fallback(self):
         page = MagicMock()
@@ -314,16 +311,11 @@ class TestDolaModeWorkChat(unittest.TestCase):
              unittest.mock.patch('dola_browser.genuine_video_url', return_value=None), \
              unittest.mock.patch('dola_browser.credit_response_text', return_value=limit_text):
 
-            # Case 1: Pro mode without fallback done -> does NOT raise CreditExhausted
+            # Pro mode raises WorkLimitReached immediately without fallback
             settings_pro = {'dola_mode': 'pro'}
             reports = []
-            # Should not raise exception
-            raise_if_credit_refused(page, task, lambda msg: reports.append(msg), settings=settings_pro)
-
-            # Case 2: Pro mode with fallback already done -> raises CreditExhausted
-            settings_done = {'dola_mode': 'pro', '_work_fallback_done': True}
             with self.assertRaises(WorkLimitReached):
-                raise_if_credit_refused(page, task, lambda msg: reports.append(msg), settings=settings_done)
+                raise_if_credit_refused(page, task, lambda msg: reports.append(msg), settings=settings_pro)
 
     def test_is_generation_in_progress_with_stop_button(self):
         from dola_browser import is_generation_in_progress

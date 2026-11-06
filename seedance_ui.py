@@ -180,12 +180,10 @@ def select_mode(page, mode, steps, report=None):
 
     opt = option()
 
-    # Nếu chế độ Work bị khóa / hết hạn mức, tự động chuyển sang chế độ Chat bình thường
     if is_pro and opt is not None and _is_item_disabled_or_limited(opt):
         if report:
-            report('Chế độ Work đang bị khóa/hết hạn mức; tự động chuyển sang chế độ Chat bình thường…')
-        is_pro = False
-        opt = find_option_for(False)
+            report('Chế độ Work đang bị khóa/hết hạn mức; dừng task theo cấu hình chỉ dùng chế độ Work.')
+        raise RuntimeError('Chế độ Work đang bị khóa hoặc đạt giới hạn trên Dola; dừng task theo cấu hình chỉ dùng chế độ Work.')
 
     _enabled(opt, 'chế độ')
     steps.click(opt)
@@ -221,22 +219,7 @@ def dropdown(page, key, fallback, target, label, steps):
 
 def prepare(page, settings, steps, report):
     mode = str(settings.get('dola_mode', 'pro')).strip().lower()
-    actual_mode = mode
-    try:
-        actual_mode = select_mode(page, mode, steps, report=report) or mode
-        if actual_mode == 'fast' and mode == 'pro':
-            settings['dola_mode'] = 'fast'
-            settings['_work_fallback_done'] = True
-            mode = 'fast'
-    except Exception as e:
-        if mode == 'pro':
-            report(f'Không thể dùng chế độ Work ({e}); tự động chuyển sang chế độ Chat bình thường để hoàn thành…')
-            settings['dola_mode'] = 'fast'
-            settings['_work_fallback_done'] = True
-            select_mode(page, 'fast', steps, report=report)
-            mode = 'fast'
-        else:
-            raise
+    select_mode(page, mode, steps, report=report)
 
     if not form_flow(settings):
         mode_label = 'Work' if mode == 'pro' else 'Chat'

@@ -12,7 +12,7 @@ class TestWorkLockedPersistence(unittest.TestCase):
         lock_for_work(acc, until=future)
         self.assertTrue(work_locked(acc))
 
-    def test_auto_jobs_converts_work_locked_account_to_fast(self):
+    def test_auto_jobs_does_not_convert_work_locked_account_to_fast(self):
         from auto_jobs import AutoJobs
         import queue
 
@@ -38,8 +38,8 @@ class TestWorkLockedPersistence(unittest.TestCase):
 
         exec_events = [e for e in emitted if e[0] == 'task_execution']
         self.assertTrue(len(exec_events) >= 1)
-        # Should be converted to fast
-        self.assertEqual(task.get('options', {}).get('dola_mode'), 'fast')
+        # Should NOT be converted to fast
+        self.assertNotEqual(task.get('options', {}).get('dola_mode'), 'fast')
 
     def test_auto_jobs_emits_work_locked_on_message(self):
         from auto_jobs import AutoJobs

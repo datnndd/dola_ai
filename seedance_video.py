@@ -444,26 +444,14 @@ def follow_conversation(page, context, url, source, settings, cancel, report, st
                 and not accepted and not state.get('tool_invoked') and not state['loading']):
             summary = ' '.join((state.get('text') or ui_text or '').split())
             from dola_limits import is_work_limit_reached
-            if str(settings.get('dola_mode', 'pro')).strip().lower() == 'pro' and not settings.get('_work_fallback_done') and is_work_limit_reached(summary):
+            if is_work_limit_reached(summary):
                 from dola_limits import retry_after
                 until = retry_after(summary)
                 report(f'[Khóa Work] {until or ""}')
-                report('Chế độ Work đã đạt giới hạn; tự động chuyển sang chế độ Chat bình thường và tiếp tục tạo video…')
-                settings['dola_mode'] = 'fast'
-                settings['_work_fallback_done'] = True
-                from seedance_ui import select_mode as ui_select_mode, EDITOR
-                from dola_browser import build_prompt
-                ui_select_mode(page, 'fast', steps)
-                editor = page.locator(EDITOR).first
-                steps.type_prompt(editor, build_prompt(dict(prompt=state.get('text') or ''), settings))
-                steps.submit(editor)
-                ui_baseline = _ui_baseline(page)
-                ui_complete = False
-                ui_finished_at = None
-                accepted = False
-                report('Đã gửi lại yêu cầu bằng chế độ Chat; tiếp tục chờ video…')
-                steps.wait(5)
-                continue
+                from account_health import WorkLimitReached, unlock_text
+                when = unlock_text(until) if until else '00:00 hôm sau'
+                report(f'Tài khoản đạt giới hạn chế độ Work • mở lại {when} • chuyển tài khoản khác.')
+                raise WorkLimitReached(until)
             if len(summary) > 180:
                 summary = summary[:177] + '...'
             detail = f' Nội dung: {summary}' if summary else ''
