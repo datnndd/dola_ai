@@ -138,6 +138,7 @@ Phiên tạo/lấy video nạp StudioRelay từ `extensions/StudioRelay` và ch�
 
 ## Hủy, lỗi và lấy lại kết quả
 
+- **Auto Web**: khi Dola xác nhận hết lượt Work trước khi tạo video, tool khóa Work của profile đến giờ mở lại, giữ nguyên job và lease rồi chuyển sang profile còn lượt, kể cả khi tắt "Tự chạy lại task lỗi". Nếu mọi profile đều khóa Work, Auto chờ giờ mở lại. Lỗi sau khi gửi mà chưa rõ Dola đã nhận hay chưa sẽ không tự gửi lại để tránh tạo video trùng.
 - Hủy dừng phần điều khiển cục bộ; yêu cầu Dola đã nhận có thể vẫn tiếp tục chạy.
 - **Chạy Task hiện tại / Chạy tất cả tác vụ** luôn tạo yêu cầu mới bằng tài khoản đang chọn, kể cả khi task có hội thoại từ lần trước. Liên kết cũ được giữ trong lịch sử của task trong workspace.
 - **Lấy kết quả cũ (tài khoản gốc)** lấy video từ hội thoại đã lưu của task hiện tại, không gửi prompt mới. Thao tác này tự dùng tài khoản đã tạo hội thoại, kể cả khi ô chọn tài khoản đó đang tắt; tài khoản gốc phải còn trong danh sách.
@@ -207,6 +208,8 @@ Tùy chọn Chromium đi kèm 3 BIG dùng `use_gpm=false`, `use_3big_browser=tru
 ## Đăng nhập tài khoản mới và proxy HTTP
 
 Trong Quản lý tài khoản bấm **Đăng nhập**, nhập proxy tùy chọn theo dạng `host:port` hoặc `host:port:user:pass`. Chrome mở Dola bằng profile mới. Hoàn tất đăng nhập Google/Dola trong cửa sổ này; tool liên tục kiểm tra tên Dola và ô soạn thảo. Khi tên ổn định, tool đóng trình duyệt và lưu profile theo tên tài khoản. Chưa nhận được tên thì chưa thêm vào danh sách; đóng trình duyệt hoặc bấm **Dừng đăng nhập** để hủy và dọn thư mục profile mới. Nếu Chrome còn khóa file, nhật ký báo chưa dọn được thư mục để xử lý sau.
+
+Khi thêm tài khoản mới (kể cả bằng cookie Facebook), lần tải Dola đầu có thể thử lại tối đa 5 lần nếu kết nối tạm thời bị ngắt (nghỉ 2, 4, 4, 4, 4 giây). Tool không tự thử lại thao tác đăng nhập Facebook.
 
 Proxy từng tài khoản có thể đổi bằng nút **Proxy**; cùng proxy được dùng cho đăng nhập và chạy video. Mật khẩu HTTP proxy được mã hóa bằng DPAPI. Màn hình thiết lập Chrome lần đầu được bỏ qua; Google vẫn có thể yêu cầu đăng nhập/xác minh.
 

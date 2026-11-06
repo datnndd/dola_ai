@@ -2,6 +2,7 @@
 import os
 import json
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -60,6 +61,49 @@ class PromptAndAccountsUITests(unittest.TestCase):
         self.p_discover.stop()
         self.p_data_qt.stop()
         self.tmp.cleanup()
+
+    def test_facebook_batch_updates_list_and_summary_as_each_login_finishes(self):
+        import copy
+        built = [([{'name': 'c_user', 'value': str(i)}], {}, 'off') for i in range(2)]
+        second_login = threading.Event()
+        def completed(_settings, account, _cancel, _report, _root, initial_cookies=None):
+            if initial_cookies[0]['value'] == '1':
+                second_login.wait(5)
+            return dict(copy.deepcopy(account), name='FB ' + str(initial_cookies[0]['value']),
+                        selected=True, connection='Phiên hợp lệ', session_verified_at=time.time())
+        dlg = studio_qt.AccountsDialog(self.win)
+        try:
+            with patch.object(studio_qt, 'register_dola_account', side_effect=completed), \
+                 patch.object(studio_qt, 'save_cookies', return_value=str(self.data_dir / 'cookie.dpapi')):
+                self.win.start_facebook_cookie_batch(built)
+                self.assertTrue(_pump(self.win, predicate=lambda: self.win.account_card.total.text() == '1'))
+                self.assertEqual(len(self.win.accounts), 1)
+                self.assertEqual(len(dlg.rows), 1)
+                self.assertIn('Live <b>1</b>', self.win.account_card.counts['live'][0].text())
+                second_login.set()
+                self.assertTrue(_pump(self.win, predicate=lambda: self.win.account_card.total.text() == '2'))
+        finally:
+            second_login.set()
+        self.assertEqual(len(dlg.rows), 2)
+        self.assertIn('Live <b>2</b>', self.win.account_card.counts['live'][0].text())
+        dlg.close()
+
+    def test_account_action_failure_or_cancel_releases_busy_state(self):
+        for login, failure, expected in (
+            (True, RuntimeError('network unavailable'), 'Lỗi kết nối'),
+            (False, studio_qt.Cancelled('stopped'), 'Chưa kiểm tra'),
+        ):
+            with self.subTest(login=login):
+                account = {'id': 'action-' + str(login), 'name': 'Test',
+                           'profile': str(self.data_dir / 'profiles' / str(login)),
+                           'connection': 'Phiên hợp lệ', 'live_state': 'live'}
+                self.win.accounts.append(account)
+                with patch.object(studio_qt, 'account_browser', side_effect=failure):
+                    self.win.run_account_action(account, login=login)
+                    self.assertTrue(_pump(self.win, timeout=1.0,
+                                          predicate=lambda: account['id'] not in self.win.account_jobs))
+                self.assertEqual(account['connection'], expected)
+                self.assertNotEqual(account['live_state'], 'live')
 
     def test_quick_prompt_single_and_multiline_and_quick_settings(self):
         # Initially has 1 untouched placeholder task

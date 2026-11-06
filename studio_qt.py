@@ -2091,6 +2091,7 @@ class Studio(QMainWindow):
         if url: cfg['open_url'] = url
         def worker():
             ok = False
+            verified = False
             try:
                 if cancel.is_set(): raise Cancelled('Đã dừng kiểm tra tài khoản.')
                 ok = account_browser(cfg, snapshot, cancel, lambda s: self.events.put(('log', s)), login=login)
@@ -2103,7 +2104,7 @@ class Studio(QMainWindow):
             if snapshot.get('hidemium_profile_id'):
                 self.events.put(('browser_profile', account['id'], {k: snapshot[k] for k in
                                  ('browser_backend', 'hidemium_profile_id', 'hidemium_owned') if k in snapshot}))
-            name_to_save = snapshot.get('name', '') if (ok and (snapshot.get('_login_verified') or not login)) else ''
+            name_to_save = snapshot.get('name', '') if verified else ''
             self.events.put(('account', account['id'], status, name_to_save, verified))
         if login:
             self.run_background(worker)
@@ -2269,7 +2270,6 @@ class Studio(QMainWindow):
                 cfg = copy.deepcopy(self.settings)
                 cancel = threading.Event()
                 self.account_jobs[aid] = cancel
-                self.request_accounts_paint()
                 saved = None
                 message = ''
                 try:

@@ -1,7 +1,13 @@
+import tempfile
+import threading
 import unittest
-from unittest.mock import MagicMock, patch
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock, call, patch
 from cookie_accounts import parse_facebook_cookie_line, facebook_cookie_from_line
-from dola_browser import _find_facebook_button, _handle_facebook_oauth_tab, _trigger_facebook_login, _handle_age_confirmation
+from browser_runtime import PlaywrightError
+from dola_browser import (BrowserSteps, _find_facebook_button, _handle_facebook_oauth_tab,
+                          _trigger_facebook_login, _handle_age_confirmation, register_dola_account)
 
 class TestFacebookCookie(unittest.TestCase):
     def test_parse_simple_cookie_string(self):
@@ -39,6 +45,41 @@ class TestFacebookCookie(unittest.TestCase):
 
 
 class TestFacebookBrowserLogin(unittest.TestCase):
+    def test_new_cookie_login_recovers_after_initial_proxy_disconnects(self):
+        with tempfile.TemporaryDirectory() as root:
+            profile = Path(root) / 'profiles' / ('a' * 32)
+            account = {'id': 'a' * 32, 'profile': str(profile), 'browser_backend': 'chrome',
+                       'proxy_mode': 'default', 'proxy': {}}
+            page = MagicMock()
+            page.goto.side_effect = [PlaywrightError('net::ERR_CONNECTION_CLOSED')] * 3 + [SimpleNamespace(status=200)]
+            page.is_closed.return_value = False
+            context = MagicMock()
+            context.pages = [page]
+            messages = []
+            with patch('dola_browser.ProfileLease'), patch('dola_browser.browser_runtime'), \
+                 patch('dola_browser.find_3big_browser', return_value='chrome.exe'), \
+                 patch('dola_browser.launch_context', return_value=context), \
+                 patch('dola_browser.wait_for_dola_identity', return_value='Test account'), \
+                 patch('dola_browser.save_live_session'), \
+                 patch.object(BrowserSteps, 'wait') as wait, patch.object(BrowserSteps, 'wait_until'):
+                result = register_dola_account({'lock_root': str(Path(root) / 'locks')}, account,
+                                               threading.Event(), messages.append, profile.parent,
+                                               initial_cookies=[{'name': 'c_user', 'value': 'test'}])
+            self.assertEqual(result['name'], 'Test account')
+            self.assertEqual(page.goto.call_count, 4)
+            self.assertEqual(wait.call_args_list, [call(2), call(4), call(4)])
+            self.assertFalse(any('Chưa tải được Dola' in message for message in messages))
+
+    def test_new_cookie_login_stops_after_persistent_disconnects(self):
+        page = MagicMock()
+        page.goto.side_effect = PlaywrightError('net::ERR_CONNECTION_CLOSED')
+        page.is_closed.return_value = False
+        steps = BrowserSteps(page, {}, threading.Event(), lambda _: None)
+        with patch.object(steps, 'wait'):
+            with self.assertRaisesRegex(RuntimeError, 'Không tải được Dola'):
+                steps.navigate('https://www.dola.com/chat', pause=False, network_attempts=6)
+        self.assertEqual(page.goto.call_count, 6)
+
     def test_find_facebook_button_found(self):
         page = MagicMock()
         btn = MagicMock()

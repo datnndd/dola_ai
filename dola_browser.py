@@ -272,9 +272,9 @@ class BrowserSteps:
         self.pause()
         return True
 
-    def navigate(self, url, pause=True):
+    def navigate(self, url, pause=True, network_attempts=3):
         """Retry only opening a page, before sending; never retry a submission."""
-        for attempt in range(3):
+        for attempt in range(network_attempts):
             check_cancel(self.cancel)
             try:
                 response = self.page.goto(url, wait_until='domcontentloaded', timeout=45000)
@@ -301,10 +301,11 @@ class BrowserSteps:
                 transient=isinstance(exc,BrowserTimeout) or any(code in str(exc) for code in (
                     'ERR_CONNECTION_RESET','ERR_CONNECTION_CLOSED','ERR_CONNECTION_TIMED_OUT',
                     'ERR_NETWORK_CHANGED','ERR_INTERNET_DISCONNECTED','ERR_NAME_NOT_RESOLVED','ERR_PROXY_CONNECTION_FAILED'))
-                if not transient or attempt==2:
+                if not transient or attempt==network_attempts-1:
                     raise RuntimeError('Không tải được Dola. Kiểm tra kết nối/proxy; chưa gửi yêu cầu.') from None
-                self.report(f'Tải trang bị gián đoạn; đợi {2**(attempt+1)} giây rồi thử lại ({attempt+1}/2).')
-                self.wait(2**(attempt+1))
+                delay = min(4, 2**(attempt+1))
+                self.report(f'Tải trang bị gián đoạn; đợi {delay} giây rồi thử lại ({attempt+1}/{network_attempts-1}).')
+                self.wait(delay)
 
     def submit(self,editor,should_send=None):
         """Wait for a usable composer and submit once, without retrying on timeout."""
@@ -1345,7 +1346,7 @@ def register_dola_account(settings, account, cancel, report, profiles_root, init
                 report('Đã nạp cookie Facebook. Đăng nhập Facebook trên Dola; tool tiếp tục chờ nhận tên tài khoản Dola.')
             if not manual or initial_cookies:
                 try:
-                    BrowserSteps(page, cfg, cancel, report).navigate(CHAT_URL, pause=False)
+                    BrowserSteps(page, cfg, cancel, report).navigate(CHAT_URL, pause=False, network_attempts=6)
                 except Exception as exc:
                     if page.is_closed():
                         raise Cancelled('Trình duyệt đã đóng khi đang tải trang.') from None
@@ -2840,13 +2841,13 @@ def render_dola_steps(task, settings, account, cancel, report, session_cache=Non
                         _fr, asst_txt = current_assistant_reply(page, reply_baseline)
                         _fin, fin_txt = latest_turn(page)
                         check_txt = f"{resp_text} {fin_txt or asst_txt}".strip()
-                        from dola_limits import is_work_limit_reached
+                        from dola_limits import is_work_limit_reached, retry_after
                         if check_txt and is_work_limit_reached(check_txt):
                             until = retry_after(check_txt)
                             report(f'[Khóa Work] {until or ""}')
                             if account:
-                                from account_availability import lock_for_work
-                                lock_for_work(account, until)
+                                from account_health import lock_for_work
+                                lock_for_work(account, until=until)
                             from account_health import WorkLimitReached, unlock_text
                             when = unlock_text(until) if until else '00:00 hôm sau'
                             report(f'Tài khoản đạt giới hạn chế độ Work • mở lại {when} • chuyển tài khoản khác.')

@@ -19,7 +19,8 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 import uuid
 
-from account_health import is_credit_error, credit_until, credit_unlock_time, unlock_text, CREDIT_ERROR
+from account_health import (is_credit_error, is_work_limit_error, credit_until, credit_unlock_time,
+                            lock_for_work, work_locked, unlock_text, CREDIT_ERROR)
 from cookie_accounts import protect
 from engine import atomic_json, Cancelled
 from task_runtime import StartupTimeout, task_failure_status, task_timeout_seconds
@@ -298,9 +299,11 @@ class AutoJobs:
         # All eligible accounts, top-down. Slots start on the first ones and move down
         # the list (wrapping to the top) when an account runs out of credits or fails.
         self.accounts = copy.deepcopy(list(accounts))
-        self.excluded = {}  # account id -> time it may be used again (midnight for credits)
+        work_mode = str(settings.get('dola_mode', 'pro')).lower() in ('pro', 'skill30')
+        self.excluded = {a['id']: a['work_locked_until'] for a in accounts if work_mode and work_locked(a)}
         self.waiting_logged = False
-        self.slots = [dict(account=copy.deepcopy(a), inbox=queue.Queue(), busy=0, blocked=False)
+        self.slots = [dict(account=copy.deepcopy(a), inbox=queue.Queue(), busy=0,
+                           blocked=work_mode and work_locked(a))
                       for a in accounts[:slot_limit]]
         self.one_job_per_account = bool(settings.get('one_job_per_account', True))
         self.capacity = 1 if self.one_job_per_account else max(1, min(5, int(settings.get('tabs_per_profile', 3))))
@@ -332,7 +335,8 @@ class AutoJobs:
     def hold_failure(self, slot, task, error):
         """Do not fail/release a lease that we intend to run again locally."""
         from dola_browser import SessionDead
-        if task.get('_dola_submission_attempted'):
+        work_refusal = is_work_limit_error(error)
+        if task.get('_dola_submission_attempted') and not work_refusal:
             # Submission may have reached Dola. Report the failed retrieval;
             # recovery uses the saved conversation, never a fresh generation.
             return False
@@ -346,7 +350,8 @@ class AutoJobs:
             return False
         again = dict(task, last_account_id=slot['account']['id'],
                      _retry_round=int(task.get('_retry_round', 0)) + 1,
-                     _session_retry=isinstance(error, SessionDead))
+                     _session_retry=isinstance(error, SessionDead),
+                     _work_limit_retry=work_refusal)
         with self.journal.lock:
             self.journal.rows[task['id']].update(note=str(error)[:1500], waiting_retry=True)
             self.journal.save()
@@ -463,6 +468,24 @@ class AutoJobs:
             reason = 'hết lượt dùng (Dola báo giờ mở lại)' if until else 'hết điểm'
             self.log(f"{account['name']} {reason} • khóa đến {unlock_text(target)}, chuyển tài khoản kế tiếp.")
 
+    def lock_work(self, account, until=None):
+        """Keep the Work lock in the UI, account pool and active scheduler."""
+        with self.lock:
+            now = time.time()
+            previous = self.excluded.get(account['id'], 0)
+            reopen = lock_for_work(account, until=until)
+            self.excluded[account['id']] = max(previous, reopen)
+            for candidate in self.accounts:
+                if candidate['id'] == account['id']:
+                    lock_for_work(candidate, until=reopen)
+            for slot in self.slots:
+                if slot['account']['id'] == account['id']:
+                    lock_for_work(slot['account'], until=reopen)
+                    slot['blocked'] = True
+        if previous <= now or reopen > previous:
+            self.emit('work_locked', account['id'], reopen)
+            self.log(f"{account['name']} hết lượt Work • khóa đến {unlock_text(reopen)}, chuyển tài khoản kế tiếp.")
+
     def waiting_for_midnight(self):
         """Some account only waits for its credit lock to end: keep Auto on instead of stopping."""
         with self.lock:
@@ -493,13 +516,7 @@ class AutoJobs:
                 val = message[len('[Khóa Work]'):].strip()
                 try: until = float(val) if val else None
                 except ValueError: until = None
-                from account_health import lock_for_work
-                reopen = lock_for_work(account, until=until)
-                with self.lock:
-                    for s in self.slots:
-                        if s['account']['id'] == account['id']:
-                            lock_for_work(s['account'], until=reopen)
-                self.emit('work_locked', account['id'], reopen)
+                self.lock_work(account, until)
             elif message.startswith('[Tài khoản] '):
                 self.emit('identity', account['id'], message[len('[Tài khoản] '):])
             elif message.startswith('[Phiên hợp lệ]'):
@@ -542,7 +559,8 @@ class AutoJobs:
             if slot.get('runner_active'):
                 slot['draining'] = True
             self._settle_locked(slot,task,path,error)
-            self.retire_account_after_job(slot)
+            if not is_work_limit_error(error):
+                self.retire_account_after_job(slot)
 
     def _settle_locked(self, slot, task, path, error):
         from dola_browser import ProfileStopped, SessionDead
@@ -559,6 +577,8 @@ class AutoJobs:
                 self.emit('status', task['id'], f"Chờ chạy • {slot['account']['name']} hết điểm, chuyển tài khoản kế tiếp")
                 slot['inbox'].put(dict(task, _attempt=uuid.uuid4().hex))
                 return
+        if error is not None and is_work_limit_error(error):
+            self.lock_work(slot['account'], credit_until(error))
         if error is not None and self.hold_failure(slot, task, error):
             return
         with self.lock:
@@ -653,13 +673,7 @@ class AutoJobs:
                     val = msg[len('[Khóa Work]'):].strip()
                     try: until = float(val) if val else None
                     except ValueError: until = None
-                    from account_health import lock_for_work
-                    reopen = lock_for_work(account, until=until)
-                    with self.lock:
-                        for s in self.slots:
-                            if s['account']['id'] == account['id']:
-                                lock_for_work(s['account'], until=reopen)
-                    self.emit('work_locked', account['id'], reopen)
+                    self.lock_work(account, until)
                 elif msg.startswith(('ProxyNo1', 'ProxyVN', 'Proxy tay', 'Proxy sẵn', 'Chrome Seedance')):
                     from proxyvn import resolve_proxy_server
                     from task_runtime import task_settings
@@ -843,7 +857,9 @@ class AutoJobs:
     def defer_claims(self):
         """Web mode reports results before claiming more (avoid over-claiming the
         server). Overridden to False where claims don't depend on pending reports."""
-        return bool(self.journal.pending()) or bool(self.held and not self.settings.get('auto_retry') and not self.claimed)
+        return bool(self.journal.pending()) or bool(
+            self.held and not self.settings.get('auto_retry') and not self.claimed
+            and not any(t.get('_session_retry') or t.get('_work_limit_retry') for t in self.held.values()))
 
     def take_claimed(self):
         """Return the next buffered task, doing a fresh GET only when the buffer is
@@ -854,20 +870,21 @@ class AutoJobs:
                 fresh = deque()
                 while self.claimed:
                     buffered = self.claimed.popleft()
-                    if buffered.get('_retry_round') and not buffered.get('_session_retry'):
+                    if buffered.get('_retry_round') and not (buffered.get('_session_retry') or buffered.get('_work_limit_retry')):
                         self.held[buffered['id']] = buffered
                     else:
                         fresh.append(buffered)
                 self.claimed.extend(fresh)
             if not self.claimed and self.held:
                 eligible = [tid for tid, item in self.held.items()
-                            if self.settings.get('auto_retry') or item.get('_session_retry')]
+                            if self.settings.get('auto_retry') or item.get('_session_retry') or item.get('_work_limit_retry')]
                 if not eligible:
                     return None
                 tid = eligible[0]
                 task = self.held.pop(tid)
                 task['_attempt'] = uuid.uuid4().hex
                 task['run_action'] = 'new'
+                task.pop('_dola_submission_attempted', None)
                 task.pop('conversation_url', None)
                 task.pop('conversation_account', None)
                 task['_auto_deadline'] = time.monotonic() + task_timeout_seconds(self.settings)
