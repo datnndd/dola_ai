@@ -389,6 +389,15 @@ class Studio(QMainWindow):
             changed = True
         if changed:
             self.later_save(); self.request_accounts_paint()
+            recovered = []
+            if res.get('rate_limits'):
+                recovered.append(f"Rate Limit ({len(res['rate_limits'])})")
+            if res.get('work'):
+                recovered.append(f"Work ({len(res['work'])})")
+            if res.get('credits'):
+                recovered.append(f"Điểm ({len(res['credits'])})")
+            if recovered and hasattr(self, 'progress_label') and not self.running:
+                self.progress_label.setText(f"✓ Đã hồi phục: {', '.join(recovered)} • sẵn sàng")
         self.after(15000, self.release_credit_locks)
 
     def open_dola_chat(self, target_account=None):
