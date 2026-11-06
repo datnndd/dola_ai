@@ -325,6 +325,46 @@ class TestDolaModeWorkChat(unittest.TestCase):
             with self.assertRaises(CreditExhausted):
                 raise_if_credit_refused(page, task, lambda msg: reports.append(msg), settings=settings_done)
 
+    def test_is_generation_in_progress_with_stop_button(self):
+        from dola_browser import is_generation_in_progress
+        page = MagicMock()
+        page.is_closed.return_value = False
+
+        def locator_side_effect(sel):
+            mock = MagicMock()
+            if 'Stop' in sel or 'Dừng' in sel or 'stop' in sel:
+                mock.count.return_value = 1
+                mock.first.is_visible.return_value = True
+            else:
+                mock.count.return_value = 0
+            return mock
+
+        page.locator.side_effect = locator_side_effect
+        self.assertTrue(is_generation_in_progress(page))
+
+    def test_is_generation_in_progress_historic_planning_text_not_blocking(self):
+        from dola_browser import is_generation_in_progress
+        page = MagicMock()
+        page.is_closed.return_value = False
+
+        # Long conversation where first paragraph had 'Tôi sẽ tạo video' but tail is completed
+        historic_text = "Tôi sẽ tạo video theo kịch bản của bạn. Trước tiên tôi lên ý tưởng... " + ("Đoạn văn bản chi tiết khác. " * 30) + "Video đã sẵn sàng để tải xuống."
+
+        def locator_side_effect(sel):
+            mock = MagicMock()
+            if sel.startswith('main'):
+                mock.count.return_value = 1
+                elem = MagicMock()
+                elem.inner_text.return_value = historic_text
+                mock.first = elem
+            else:
+                mock.count.return_value = 0
+            return mock
+
+        page.locator.side_effect = locator_side_effect
+        # Since tail text does not have active generating words, it should be False
+        self.assertFalse(is_generation_in_progress(page))
+
 
 if __name__ == '__main__':
     unittest.main()

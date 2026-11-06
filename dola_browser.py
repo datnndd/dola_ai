@@ -1584,6 +1584,15 @@ def is_generation_in_progress(page):
     try:
         if page.is_closed():
             return False
+        stop_selectors = (
+            'button[aria-label*="Stop" i]:visible',
+            'button[aria-label*="Dừng" i]:visible',
+            '[data-testid*="stop" i]:visible',
+            'button:has([class*="stop" i]):visible'
+        )
+        if page.locator(', '.join(stop_selectors)).count():
+            return True
+
         progress_selectors = (
             '[role="progressbar"]',
             '[aria-busy="true"]',
@@ -1605,9 +1614,10 @@ def is_generation_in_progress(page):
         main_loc = page.locator('main, [class*="message-list"], [class*="list_items"]')
         if main_loc.count():
             main_text = main_loc.first.inner_text(timeout=1000)
-            if reply_still_running(main_text):
+            tail_text = main_text[-500:] if len(main_text) > 500 else main_text
+            if tail_text and reply_still_running(tail_text):
                 return True
-            if re.search(r'\b\d{1,2}%\b', main_text):
+            if tail_text and re.search(r'\b\d{1,2}%\b', tail_text):
                 return True
     except Exception:
         pass
@@ -1747,7 +1757,7 @@ EXT_VIDEO_SELECTOR = 'video, [data-video-url], [data-play-url], [src*=".mp4"]'
 # Hàm gốc lấy phần tử cuối cùng; ở đây trả cả danh sách để loại video có sẵn
 # trước khi gửi prompt.
 ACTIVE_VIDEO_JS = r'''() => {
-    const isInput = el => !!el.closest('[data-message-author-role="user"], [data-message-role="user"], .justify-end, [contenteditable="true"], nav, aside');
+    const isInput = el => !!el.closest('[data-message-author-role="user"], [data-message-role="user"], .justify-end, [contenteditable="true"], nav, aside[class*="sidebar"]:not([class*="artifact"]):not([class*="work"])');
     const videos = [];
     for (const el of document.querySelectorAll('video')) {
         if (isInput(el)) continue;
@@ -1762,7 +1772,7 @@ ACTIVE_VIDEO_JS = r'''() => {
         if (src && src.length >= 5) sources.push(src);
     }
     const files = [];
-    for (const el of document.querySelectorAll('main a[href], [data-message-author-role="assistant"] a[href]')) {
+    for (const el of document.querySelectorAll('main a[href], [data-message-author-role="assistant"] a[href], [class*="artifact" i] a[href], [class*="work" i] a[href], [class*="workspace" i] a[href], [class*="canvas" i] a[href], [data-slot="artifact-content"] a[href], [role="complementary"] a[href]')) {
         if (isInput(el)) continue;
         const href = el.href || '';
         let url;
@@ -1787,16 +1797,23 @@ SCROLL_BOTTOM_JS = r'''() => {
     }
 }'''
 LATEST_TURN_JS = r'''(shareSel) => {
+    const isFinishedTurn = (el) => {
+        if (!el) return false;
+        if (el.querySelector(shareSel)) return true;
+        if (el.querySelector('[data-testid="message_action_copy"], [data-testid*="copy" i], [class*="message-action"], [data-testid*="message_action"]')) return true;
+        if (el.querySelector('video, [data-studio-mp4-result], [data-flow-product-card-root], [class*="block-video-"]')) return true;
+        return false;
+    };
     const rows = [...document.querySelectorAll('[class*="list_items"] > [class*="v_list_row"]')]
         .filter(row => (row.innerText || '').trim() || row.querySelector('button, video, img'));
     if (rows.length) {
         const last = rows[rows.length - 1];
-        return {finished: !!last.querySelector(shareSel), text: last.innerText || ''};
+        return {finished: isFinishedTurn(last), text: last.innerText || ''};
     }
-    const shares = document.querySelectorAll(shareSel);
+    const shares = document.querySelectorAll(shareSel + ', [data-testid="message_action_copy"], [data-testid*="copy" i]');
     if (!shares.length) return {finished: false, text: ''};
     const share = shares[shares.length - 1];
-    const bar = share.closest('.message-action-button-main') || share;
+    const bar = share.closest('.message-action-button-main, [class*="message-action"]') || share;
     return {finished: true, text: (bar.parentElement || bar).innerText || ''};
 }'''
 
@@ -3006,6 +3023,18 @@ def render_dola_steps(task, settings, account, cancel, report, session_cache=Non
                             with download_stage():
                                 record_api_preview(context,page,direct,source,settings,cancel,report,provenance)
                             break
+                        # Nếu đã có bản MP4 đính kèm hoặc card kết quả (đặc biệt trong chế độ Work), tải trực tiếp không cần F5
+                        if (file_seen or attachment_links) and not strict_no_logo:
+                            downloaded = False
+                            with download_stage():
+                                if attachment_links:
+                                    file_sources = [VideoSource(u, url.rsplit('/',1)[-1], (), 'assistant_mp4_attachment') for u in attachment_links]
+                                    downloaded = download_video(context, page, [], source, cancel, report, steps, file_sources, provenance)
+                                if not downloaded and file_seen:
+                                    downloaded = download_file_card(page, source, cancel, report, file_baseline)
+                            if downloaded:
+                                provenance.update(mode='attachment_mp4', watermark_status='unknown')
+                                break
                         # A placeholder card is not enough to refresh an active generation.
                         if not media_present:
                             video_received=False
@@ -3023,6 +3052,25 @@ def render_dola_steps(task, settings, account, cancel, report, session_cache=Non
                         with download_stage():
                             record_api_preview(context,page,api_sources,source,settings,cancel,report,provenance)
                         break
+                    # Fallback dự phòng khi API không trả nguồn sạch (chế độ Work hoặc API preview không có fallback)
+                    clean_grace = bool(video_seen_at) and (time.monotonic() - video_seen_at >= 15)
+                    if clean_grace and not strict_no_logo:
+                        downloaded = False
+                        with download_stage():
+                            if attachment_links:
+                                file_sources = [VideoSource(u, url.rsplit('/',1)[-1], (), 'assistant_mp4_attachment') for u in attachment_links]
+                                downloaded = download_video(context, page, [], source, cancel, report, steps, file_sources, provenance)
+                            if not downloaded and file_seen:
+                                downloaded = download_file_card(page, source, cancel, report, file_baseline)
+                            if not downloaded:
+                                players = [s['url'] for s in states if s['url']]
+                                candidates = tracker.candidates(url.rsplit('/',1)[-1], players, allow_model=True)
+                                if candidates:
+                                    downloaded = download_video(context, page, tracker.media_urls, source, cancel, report, steps, candidates, provenance)
+                            if not downloaded and (states or tracker.media_urls or links):
+                                downloaded = download_video(context, page, tracker.media_urls, source, cancel, report, steps, None, provenance)
+                        if downloaded:
+                            break
                     if elapsed-last_report>=20:
                         report(f'Đã nhận video; đang lấy nguồn không logo • {elapsed}s '
                                f'(đã bắt {len(tracker.fallbacks)} API nguồn). Không gửi thêm.')

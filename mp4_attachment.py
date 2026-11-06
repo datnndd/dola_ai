@@ -1,19 +1,31 @@
 """Recognize assistant MP4 attachments, including cards with download buttons."""
 SCAN = r'''(baseline) => {
-    const excluded='[data-message-author-role="user"], [data-message-role="user"], .justify-end, form, [contenteditable="true"], nav, aside, [data-input-engine-action-source]';
+    const excluded='[data-message-author-role="user"], [data-message-role="user"], .justify-end, form, [contenteditable="true"], nav, aside[class*="sidebar"]:not([class*="artifact"]):not([class*="work"]):not([class*="canvas"]), [data-input-engine-action-source]';
     const fileName=/\.mp4(?=$|[\s?#)\]"'])/i;
     const matches=[];
     document.querySelectorAll('[data-studio-mp4-result]').forEach(e=>e.removeAttribute('data-studio-mp4-result'));
-    for(const el of document.querySelectorAll('main a, main button, main [role="button"], main [data-download-url], main [data-file-url], main [data-file-name], main [data-filename], main [data-testid*="file" i], main [class*="file-card" i], main [class*="fileCard"], main [data-flow-product-card-root], main [data-testid*="product-card" i], main [data-testid*="flow-product" i]')) {
+    const selectors = [
+        'main a', 'main button', 'main [role="button"]', 'main [data-download-url]', 'main [data-file-url]',
+        'main [data-file-name]', 'main [data-filename]', 'main [data-testid*="file" i]', 'main [class*="file-card" i]',
+        'main [class*="fileCard"]', 'main [data-flow-product-card-root]', 'main [data-testid*="product-card" i]',
+        'main [data-testid*="flow-product" i]',
+        '[class*="artifact" i] a', '[class*="artifact" i] button', '[class*="artifact" i] [role="button"]',
+        '[class*="work" i] a', '[class*="work" i] button', '[class*="workspace" i] a', '[class*="workspace" i] button',
+        '[class*="canvas" i] a', '[class*="canvas" i] button',
+        '[data-slot="artifact-content"] a', '[data-slot="artifact-content"] button', '[data-slot="artifact-content"] [role="button"]',
+        '[role="complementary"] a', '[role="complementary"] button',
+        '[class*="block-video-" i]', '[class*="video-card" i]', '[class*="video_card" i]'
+    ].join(', ');
+    for(const el of document.querySelectorAll(selectors)) {
         if(el.closest(excluded))continue;
         const text=[el.getAttribute('download'),el.getAttribute('title'),el.getAttribute('aria-label'),el.getAttribute('data-file-name'),el.getAttribute('data-filename'),el.innerText,...[...el.querySelectorAll('span,[title],[data-file-name]')].map(n=>n.getAttribute('title')||n.getAttribute('data-file-name')||n.innerText)].filter(Boolean).join(' ');
         const raw=el.getAttribute('href')||el.getAttribute('data-download-url')||el.getAttribute('data-file-url')||'';
-        const isCard=el.matches('[data-flow-product-card-root],[data-testid*="product-card" i],[data-testid*="flow-product" i],[class*="file-card" i],[class*="fileCard"],[class*="video-card" i]');
-        const hasDownloadHint = /(?:\.mp4|tải xuống|tải về|tai xuong|tai ve|download|tải video|save video|lưu)/i.test(text + ' ' + raw)
+        const isCard=el.matches('[data-flow-product-card-root],[data-testid*="product-card" i],[data-testid*="flow-product" i],[class*="file-card" i],[class*="fileCard"],[class*="video-card" i],[class*="video_card" i],[class*="block-video-" i],[data-slot="artifact-content"],[class*="artifact-card" i]');
+        const hasDownloadHint = /(?:\.mp4|tải xuống|tải về|tai xuong|tai ve|download|tải video|save video|lưu|export|xem video|video)/i.test(text + ' ' + raw)
             || el.hasAttribute('download')
             || el.hasAttribute('data-download-url')
             || el.hasAttribute('data-file-url')
-            || !!el.querySelector('a[download], a[href*="download" i], button[aria-label*="tải" i], button[aria-label*="download" i], [role="button"][aria-label*="tải" i]');
+            || !!el.querySelector('a[download], a[href*="download" i], a[href*=".mp4" i], button[aria-label*="tải" i], button[aria-label*="download" i], button[aria-label*="save" i], [role="button"][aria-label*="tải" i], [data-testid*="download" i], svg.lucide-download');
         if(!hasDownloadHint && !isCard) continue;
         const key=raw+'|'+text;
         if((baseline||[]).includes(key))continue;
@@ -22,7 +34,7 @@ SCAN = r'''(baseline) => {
         // sau đó bất kỳ nút/link nào, cuối cùng dùng chính card để bấm.
 
         let action=el.matches('a[href],button,[role="button"]') ? el : (
-            el.querySelector('a[download],a[href*="download" i],button[aria-label*="download" i],button[aria-label*="tải" i],button[aria-label*="save" i],[role="button"][aria-label*="tải" i]')
+            el.querySelector('a[download],a[href*="download" i],a[href*=".mp4" i],button[aria-label*="download" i],button[aria-label*="tải" i],button[aria-label*="save" i],[role="button"][aria-label*="tải" i],[data-testid*="download" i]')
             || el.querySelector('a[href],button,[role="button"]')
             || (isCard || raw ? el : null));
         if(!action || action.closest(excluded) || !el.getClientRects().length)continue;
@@ -67,8 +79,9 @@ def download_file_card(page, output, cancel, report, baseline=()):
             pass
         target = card
         try:
-            dl = card.locator('a[download], a[href*="download" i], button[aria-label*="tải" i], button[aria-label*="download" i], '
-                              'button[aria-label*="save" i], [role="button"][aria-label*="tải" i], button:has-text("Tải xuống"), button:has-text("Tải về"), button:has-text("Download")')
+            dl = card.locator('a[download], a[href*="download" i], a[href*=".mp4" i], button[aria-label*="tải" i], button[aria-label*="download" i], '
+                              'button[aria-label*="save" i], [role="button"][aria-label*="tải" i], [data-testid*="download" i], '
+                              'button:has-text("Tải xuống"), button:has-text("Tải về"), button:has-text("Download"), button:has-text("Tải"), button:has-text("Save")')
             if dl.count():
                 target = dl.first
         except Exception:
