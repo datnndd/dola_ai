@@ -127,6 +127,9 @@ class TaskModel(QAbstractTableModel):
         name = task.get('name', '')
         path = task.get('output_path', '')
         proxy = ex.get('proxy_server', '')
+        if not proxy and ex and acc:
+            from proxyvn import resolve_proxy_server
+            proxy = resolve_proxy_server(self.app.settings, acc)
         values = (
             str(task.get('stt') or (name.split('#')[-1] if '#' in name else row + 1)),
             '',
@@ -1398,33 +1401,13 @@ class Studio(QMainWindow):
         session_cache_lock = threading.Lock()
         account_order = sort_accounts_by_lru(accounts)
         for a in account_order: available.put(a)
-        credit_locked_ids = set(); work_locked_ids = set(); rate_limited_ids = set()
+        credit_locked_ids = {a['id'] for a in accounts if credit_locked(a)}; work_locked_ids = {a['id'] for a in accounts if work_locked(a)}; rate_limited_ids = {a['id'] for a in accounts if rate_limited(a)}
         stopped_ids = set(); credit_lock = threading.Lock()
         def assignment(task, account):
             task['last_account_id'] = (account or {}).get('id')
             options = task_settings(cfg, task)
-            proxy = (account or {}).get('proxy') or {}
-            proxy_server = proxy.get('server', '') if isinstance(proxy, dict) else ':'.join(str(proxy).split(':')[:2])
-            if not proxy_server:
-                mode = (account or {}).get('proxy_mode', 'default')
-                if mode == 'manual':
-                    proxy_server = 'Proxy tay'
-                elif mode == 'off':
-                    proxy_server = 'Không proxy'
-                else:
-                    src = cfg.get('proxy_source', 'proxyno1')
-                    if src == 'pvn':
-                        proxy_server = 'ProxyVN (Tự động)'
-                    elif src == 'proxyno1':
-                        proxy_server = 'ProxyNo1 (Tự động)'
-                    elif src == 'manual':
-                        default_p = cfg.get('default_proxy', {})
-                        if isinstance(default_p, dict) and default_p.get('server'):
-                            proxy_server = default_p['server']
-                        else:
-                            proxy_server = 'Proxy tay (Tự động)'
-                    else:
-                        proxy_server = 'Tự động'
+            from proxyvn import resolve_proxy_server
+            proxy_server = resolve_proxy_server(cfg, account)
             self.events.put(('task_execution', task['id'], {
                 'model': options['model'], 'duration': options['duration'],
                 'account_id': (account or {}).get('id'),
@@ -1442,13 +1425,22 @@ class Studio(QMainWindow):
                         try: account = available.get(timeout=.2)
                         except queue.Empty: pass
                 def report(msg):
-                    if msg.startswith('[Tài khoản] ') and account:
+                    if msg.startswith('[Khóa Work]') and account:
+                        val = msg[len('[Khóa Work]'):].strip()
+                        try: until = float(val) if val else None
+                        except ValueError: until = None
+                        from account_health import lock_for_work
+                        reopen = lock_for_work(account, until=until)
+                        with credit_lock:
+                            work_locked_ids.add(account['id'])
+                        self.events.put(('work_locked', account['id'], reopen))
+                    elif msg.startswith('[Tài khoản] ') and account:
                         self.events.put(('identity', account['id'], msg[len('[Tài khoản] '):]))
                     elif msg.startswith('[Phiên hợp lệ]') and account:
                         self.events.put(('session_verified', account['id'], msg[len('[Phiên hợp lệ]'):].strip()))
                     elif msg.startswith('[Hội thoại] ') and account:
                         self.events.put(('conversation', task['id'], msg[len('[Hội thoại] '):], account['id']))
-                    elif msg.startswith(('ProxyNo1', 'ProxyVN', 'Proxy tay', 'Chrome Seedance')):
+                    elif msg.startswith(('ProxyNo1', 'ProxyVN', 'Proxy tay', 'Proxy sẵn', 'Chrome Seedance')):
                         self.events.put(('log', f"{task['name']}: {msg}"))
                         if account and account.get('proxy'):
                             assignment(task, account)
@@ -1493,7 +1485,7 @@ class Studio(QMainWindow):
                             self.events.put(('session_verified', account['id'], msg[len('[Phiên hợp lệ]'):].strip()))
                         elif msg.startswith('[Hội thoại] '):
                             self.events.put(('conversation', task['id'], msg[len('[Hội thoại] '):], account['id']))
-                        elif msg.startswith(('ProxyNo1', 'ProxyVN', 'Proxy tay', 'Chrome Seedance')):
+                        elif msg.startswith(('ProxyNo1', 'ProxyVN', 'Proxy tay', 'Proxy sẵn', 'Chrome Seedance')):
                             self.events.put(('log', f"{task['name']}: {msg}"))
                             if account and account.get('proxy'):
                                 assignment(task, account)

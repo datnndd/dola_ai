@@ -474,6 +474,7 @@ class AutoJobs:
 
     def report_for(self, task, account):
         from task_runtime import task_settings
+        from proxyvn import resolve_proxy_server
         with self.lock:
             if isinstance(self.journal, ReportJournal):
                 with self.journal.lock:
@@ -484,17 +485,38 @@ class AutoJobs:
                     self.journal.data['tasks'][task['id']]['last_account_id'] = account['id']
                     self.journal.save()
         cfg = task_settings(self.settings, task)
+        from account_health import work_locked
+        if work_locked(account) and str(cfg.get('dola_mode', 'pro')).strip().lower() == 'pro':
+            cfg['dola_mode'] = 'fast'
+            if 'options' not in task or not isinstance(task.get('options'), dict):
+                task['options'] = {}
+            task['options']['dola_mode'] = 'fast'
+        proxy_server = resolve_proxy_server(self.settings, account)
         self.emit('task_execution', task['id'], dict(model=cfg['model'],duration=cfg['duration'],
-            account_id=account['id'],account_name=account['name']))
+            account_id=account['id'],account_name=account['name'],proxy_server=proxy_server))
         def report(message):
-            if message.startswith('[Tài khoản] '):
+            if message.startswith('[Khóa Work]'):
+                val = message[len('[Khóa Work]'):].strip()
+                try: until = float(val) if val else None
+                except ValueError: until = None
+                from account_health import lock_for_work
+                reopen = lock_for_work(account, until=until)
+                with self.lock:
+                    for s in self.slots:
+                        if s['account']['id'] == account['id']:
+                            lock_for_work(s['account'], until=reopen)
+                self.emit('work_locked', account['id'], reopen)
+            elif message.startswith('[Tài khoản] '):
                 self.emit('identity', account['id'], message[len('[Tài khoản] '):])
             elif message.startswith('[Phiên hợp lệ]'):
                 self.emit('session_verified', account['id'], message[len('[Phiên hợp lệ]'):].strip())
             elif message.startswith('[Hội thoại] '):
                 self.emit('conversation', task['id'], message[len('[Hội thoại] '):], account['id'])
-            elif message.startswith(('ProxyNo1', 'Proxy tay')):
+            elif message.startswith(('ProxyNo1', 'ProxyVN', 'Proxy tay', 'Proxy sẵn', 'Chrome Seedance')):
                 self.log(f"Chrome {account['name']}: {message}")  # proxy/đổi IP: nhật ký, không đè trạng thái task
+                ps = resolve_proxy_server(self.settings, account)
+                self.emit('task_execution', task['id'], dict(model=cfg['model'], duration=cfg['duration'],
+                    account_id=account['id'], account_name=account['name'], proxy_server=ps))
             else:
                 self.emit('status', task['id'], message)
         return report
@@ -631,11 +653,32 @@ class AutoJobs:
                 return not slot['blocked'] and not slot.get('draining') and slot['account']['id'] == account['id']
             def keep_open():
                 return False  # Auto never keeps an empty Chrome waiting for another job.
+            def on_browser_report(msg):
+                self.log(f"Chrome {account['name']}: {msg}")
+                if msg.startswith('[Khóa Work]'):
+                    val = msg[len('[Khóa Work]'):].strip()
+                    try: until = float(val) if val else None
+                    except ValueError: until = None
+                    from account_health import lock_for_work
+                    reopen = lock_for_work(account, until=until)
+                    with self.lock:
+                        for s in self.slots:
+                            if s['account']['id'] == account['id']:
+                                lock_for_work(s['account'], until=reopen)
+                    self.emit('work_locked', account['id'], reopen)
+                elif msg.startswith(('ProxyNo1', 'ProxyVN', 'Proxy tay', 'Proxy sẵn', 'Chrome Seedance')):
+                    from proxyvn import resolve_proxy_server
+                    from task_runtime import task_settings
+                    ps = resolve_proxy_server(self.settings, account)
+                    t_cfg = task_settings(self.settings, task)
+                    self.emit('task_execution', task['id'], dict(model=t_cfg['model'], duration=t_cfg['duration'],
+                        account_id=account['id'], account_name=account['name'], proxy_server=ps))
+
             try:
                 runner([task],account,self.settings,self.cancel,self.report_for,
                     lambda task,path,error:self.settle(slot,task,path,error),
                     video_submit=submit_video,task_cancels=self.task_cancels,intake=slot['inbox'],
-                    browser_report=lambda msg:self.log(f"Chrome {account['name']}: {msg}"),
+                    browser_report=on_browser_report,
                     profile_error=lambda exc:self.block_slot(slot),
                     accepting=current, keep_open=keep_open)
             except Exception as exc:

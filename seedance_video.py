@@ -445,6 +445,9 @@ def follow_conversation(page, context, url, source, settings, cancel, report, st
             summary = ' '.join((state.get('text') or ui_text or '').split())
             from dola_limits import is_work_limit_reached
             if str(settings.get('dola_mode', 'pro')).strip().lower() == 'pro' and not settings.get('_work_fallback_done') and is_work_limit_reached(summary):
+                from dola_limits import retry_after
+                until = retry_after(summary)
+                report(f'[Khóa Work] {until or ""}')
                 report('Chế độ Work đã đạt giới hạn; tự động chuyển sang chế độ Chat bình thường và tiếp tục tạo video…')
                 settings['dola_mode'] = 'fast'
                 settings['_work_fallback_done'] = True

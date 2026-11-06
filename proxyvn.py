@@ -140,6 +140,45 @@ def endpoint(proxy):
     return f'{parsed.hostname}:{parsed.port}'
 
 
+def resolve_proxy_server(settings, account):
+    """Xác định chuỗi hiển thị proxy cho tài khoản (IP:Port, hoặc tên nguồn tự động/proxy tay)."""
+    account = account or {}
+    proxy = account.get('proxy') or {}
+    proxy_server = ''
+    if isinstance(proxy, dict) and proxy.get('server'):
+        parsed = urlsplit(proxy['server'])
+        if parsed.hostname and parsed.port:
+            proxy_server = f"{parsed.hostname}:{parsed.port}"
+        else:
+            proxy_server = proxy['server']
+    elif isinstance(proxy, str) and proxy:
+        proxy_server = ':'.join(proxy.split(':')[:2])
+
+    if not proxy_server:
+        mode = account_proxy_mode(account)
+        if mode == 'off':
+            return 'Không proxy'
+        src = proxy_source(settings or {})
+        if mode == 'manual' or src == 'manual':
+            m_proxies = manual_proxies(settings or {})
+            pos = (settings or {}).get('manual_proxy_slots', {}).get(account.get('id'))
+            if pos is not None and m_proxies:
+                proxy_server = endpoint(m_proxies[pos % len(m_proxies)])
+            elif m_proxies:
+                proxy_server = endpoint(m_proxies[0])
+            elif (settings or {}).get('default_proxy', {}).get('server'):
+                proxy_server = endpoint((settings or {}).get('default_proxy'))
+            else:
+                proxy_server = 'Proxy tay'
+        elif src == 'pvn':
+            proxy_server = 'ProxyVN (Tự động)'
+        elif src == 'proxyno1':
+            proxy_server = 'ProxyNo1 (Tự động)'
+        else:
+            proxy_server = 'Tự động'
+    return proxy_server or 'Không proxy'
+
+
 def _headers(stream):
     lines, size = [], 0
     while True:

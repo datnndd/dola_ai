@@ -1647,14 +1647,16 @@ def raise_if_credit_refused(page, task, report, settings=None):
         report(f'Tài khoản bị giới hạn tần suất tin nhắn (Rate Limit) • mở lại {when} • dừng task để chuyển tài khoản khác.')
         raise RateLimitExceeded(until)
 
-    if settings and str(settings.get('dola_mode', 'pro')).strip().lower() == 'pro' and not settings.get('_work_fallback_done'):
-        if is_work_limit_reached(text):
-            return
     if is_work_limit_reached(text):
-        until = retry_after(text)
-        when = unlock_text(until) if until else '00:00 hôm sau'
-        report(f'Tài khoản đạt giới hạn chế độ Work • mở lại {when} • chuyển tài khoản khác.')
-        raise WorkLimitReached(until)
+        if settings and str(settings.get('dola_mode', 'pro')).strip().lower() != 'pro':
+            pass
+        elif settings and str(settings.get('dola_mode', 'pro')).strip().lower() == 'pro' and not settings.get('_work_fallback_done'):
+            return
+        else:
+            until = retry_after(text)
+            when = unlock_text(until) if until else '00:00 hôm sau'
+            report(f'Tài khoản đạt giới hạn chế độ Work • mở lại {when} • chuyển tài khoản khác.')
+            raise WorkLimitReached(until)
     if usage_limit_reached(text):
         until = retry_after(text)
         when = unlock_text(until) if until else '00:00 hôm sau'
@@ -2500,6 +2502,14 @@ def render_dola_steps(task, settings, account, cancel, report, session_cache=Non
     settings = prepare_account_settings(settings, account, cancel, report)
     check_cancel(cancel)
     settings = dict(settings or {})
+    from account_health import work_locked, unlock_text
+    if work_locked(account) and str(settings.get('dola_mode', 'pro')).strip().lower() == 'pro':
+        when = unlock_text(account.get('work_locked_until'))
+        report(f"Tài khoản {account.get('name', '')} đang trong thời gian giới hạn chế độ Work (đến {when}) • tự động chuyển thẳng sang chế độ Chat bình thường.")
+        settings['dola_mode'] = 'fast'
+        settings['_work_fallback_done'] = True
+        if task and 'options' in task and isinstance(task.get('options'), dict):
+            task['options']['dola_mode'] = 'fast'
     from seedance_30s import enabled as merge30_enabled, prompts as prompts30
     merge30 = merge30_enabled(settings)
     export_settings = dict(settings)
@@ -2702,10 +2712,15 @@ def render_dola_steps(task, settings, account, cancel, report, session_cache=Non
                         check_txt = f"{resp_text} {fin_txt or asst_txt}".strip()
                         from dola_limits import is_work_limit_reached
                         if check_txt and is_work_limit_reached(check_txt):
+                            until = retry_after(check_txt)
+                            report(f'[Khóa Work] {until or ""}')
                             report('Chế độ Work đã đạt giới hạn; tự động chuyển sang chế độ Chat bình thường để hoàn thành…')
                             settings['dola_mode'] = 'fast'
                             settings['_work_fallback_done'] = True
                             task['options'] = dict(task.get('options') or {}, dola_mode='fast')
+                            if account:
+                                from account_availability import lock_for_work
+                                lock_for_work(account, until)
 
                             # 1. Bấm nút chuyển sang Chat nếu có sẵn trên giao diện/popup
                             switch_selectors = (
